@@ -27,7 +27,7 @@ nepochs = 5000
 max_target = 1.0
 Nin = [28,28,1]
 Nout = 10
-batch_size = 64
+batch_size = 50 #Ensure that batchsize can divide 50000 and 10000
 
 def build_mlp():
     Nfeat1=500
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     acc_train = []
     acc_test = []
-    lr = 1e-4
+    lr = 3e-5
 
     for i in range(nepochs):
         gen_inputs, gen_targets = image2spiketrain(*gen_train.next())

@@ -56,6 +56,8 @@ layers[0], states[0], output0 = DCNNConvLayer(feat_out=Nfeat1,
         target_size = Nout,
         layer_input = None   ,
         batch_size=batch_size,
+        tau = 15,
+        taus = 20,
         pooling=2)
 
 layers[1], states[1], output1 = DCNNConvLayer(feat_out=Nfeat2,
@@ -63,7 +65,9 @@ layers[1], states[1], output1 = DCNNConvLayer(feat_out=Nfeat2,
         input_shape=[16,16,Nfeat1],
         target_size = Nout,
         layer_input = output0,
-        batch_size=batch_size,
+        batch_size = batch_size,
+        tau = 15,
+        taus = 20,
         pooling=2)
 
 layers[2], states[2], output2 = DCNNConvLayer(feat_out=Nfeat3,
@@ -72,6 +76,8 @@ layers[2], states[2], output2 = DCNNConvLayer(feat_out=Nfeat3,
         target_size = Nout,
         layer_input = output1,
         batch_size=batch_size,
+        tau = 15,
+        taus = 20,
         pooling=2)
 
 
@@ -98,12 +104,12 @@ if __name__ == '__main__':
 
     acc_train = []
     acc_test = []
-    lr = 1e-3
+    lr = 50e-5
 
     for i in range(nepochs):
         gen_inputs, gen_targets = gen_train.next()
-        inputs = np.transpose(gen_inputs,[3,0,1,2]).reshape(T,batch_size,np.prod(Nin))
-        targets_original = np.transpose(gen_targets,[1,0,2]).copy()
+        inputs = gen_inputs.reshape(T,batch_size,np.prod(Nin))
+        targets_original = gen_targets.copy()
         targets = [None]*len(states)
         for j in range(len(states)):
             targets[j] = targets_original #target_convolve(targets_original ,alpha=layers[j].tau,alphas=layers[j].taus)*max_target
@@ -120,8 +126,8 @@ if __name__ == '__main__':
         print(' '.join('{:1.3f}'.format(k) for k in acc_train[-1]))
         if (i%20)==0:
             gen_inputs, gen_targets = gen_test.next()
-            inputs = np.transpose(gen_inputs,[3,0,1,2]).reshape(T,batch_size,np.prod(Nin))
-            targets_original = np.transpose(gen_targets,[1,0,2]).copy()
+            inputs = gen_inputs.reshape(T,batch_size,np.prod(Nin))
+            targets_original = gen_targets.copy()
             targets = [None]*len(states)
             for j in range(len(states)):
                 targets[j] = targets_original #target_convolve(targets_original ,alpha=layers[j].tau,alphas=layers[j].taus)*max_target
