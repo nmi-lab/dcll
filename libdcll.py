@@ -72,7 +72,7 @@ class SNNDenseLayer(object):
         self.tarp = 3
 
         limit = np.sqrt(6.0 / (np.prod(self.layer_size) + self.target_size))
-        self.M = np.random.uniform(-limit, limit, size=[np.prod(self.layer_size)/self.output_factor,self.target_size]).astype(np.float32)
+        self.M = np.random.uniform(-limit, limit, size=[np.prod(self.layer_size)//self.output_factor,self.target_size]).astype(np.float32)
         self.bM=bM=-5
 
         self.is_output=False
@@ -222,7 +222,7 @@ class SNNConvLayer(SNNDenseLayer):
         self.pooling=pooling
         self.output_factor = pooling**2
         limit = np.sqrt(6.0 / (np.prod(self.layer_size) + self.target_size))
-        self.M = np.random.uniform(-limit, limit, size=[np.prod(self.layer_size)/self.output_factor,self.target_size]).astype(np.float32)
+        self.M = np.random.uniform(-limit, limit, size=[np.prod(self.layer_size)//self.output_factor,self.target_size]).astype(np.float32)
         self.bM=bM=-5
 
     def step(self, states_prev, XY):
@@ -405,7 +405,7 @@ def mksavedir(pre='Results/', exp_dir=None):
     elif isinstance(exp_dir, str):
         direct = pre + exp_dir
         if os.path.exists(direct):
-            print("Warning: overwriting directory {0}".format(direct))
+            print(("Warning: overwriting directory {0}".format(direct)))
             rmtree(direct)
 
     else:
@@ -419,7 +419,7 @@ def mksavedir(pre='Results/', exp_dir=None):
         directory + time.strftime("%H:%M:%S", time.localtime()), 'w')
     fh.close()
 
-    print("Created experiment directory {0}".format(directory))
+    print(("Created experiment directory {0}".format(directory)))
     return directory
 
 

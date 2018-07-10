@@ -10,7 +10,7 @@
 # Licence : GPLv2
 # modified from https://rdipietro.github.io/tensorflow-scan-examples/#defining-the-rnn-model-from-scratch
 #----------------------------------------------------------------------------- 
-from __future__ import division, print_function
+
 
 import matplotlib.pyplot as plt
 
@@ -28,10 +28,11 @@ from load_dvs_gestures import *
 from libdcll import *
 
 
-Nfeat1=64
-Nfeat2=96
-Nfeat3=128
+Nfeat1=16
+Nfeat2=32
+Nfeat3=48
 Nfeat4=64
+Nfeat5=64
 
 Nin = [32,32,1]
 Nhid1 = [32,32,Nfeat1]
@@ -46,51 +47,51 @@ max_target = .9
 batch_size = 64
 
 
-max_layers = 3
+max_layers = 4
 layers = [None for i in range(max_layers)]
 states = [None for i in range(max_layers)]
 
 layers[0], states[0], output0 = DCNNConvLayer(feat_out=Nfeat1,
-        ksize=5,
+        ksize=7,
         input_shape=[32,32,1]     ,
         target_size = Nout,
         layer_input = None   ,
         batch_size=batch_size,
-        tau = 15,
+        tau = 10,
         taus = 20,
         pooling=2)
 
 layers[1], states[1], output1 = DCNNConvLayer(feat_out=Nfeat2,
-        ksize=5,
+        ksize=7,
         input_shape=[16,16,Nfeat1],
         target_size = Nout,
         layer_input = output0,
         batch_size = batch_size,
-        tau = 15,
+        tau = 10,
         taus = 20,
         pooling=2)
 
 layers[2], states[2], output2 = DCNNConvLayer(feat_out=Nfeat3,
-        ksize=5,
+        ksize=7,
         input_shape=[8, 8,Nfeat2],
         target_size = Nout,
         layer_input = output1,
         batch_size=batch_size,
-        tau = 15,
+        tau = 10,
+        taus = 20,
+        pooling=1)
+
+layers[3], states[3], output3 = DCNNConvLayer(feat_out=Nfeat4,
+        ksize=7,
+        input_shape=[8, 8,Nfeat3],
+        target_size = Nout,
+        layer_input = output2,
+        batch_size=batch_size,
+        tau = 10,
         taus = 20,
         pooling=2)
 
 
-#AllConv
-#layers[0], states[0], output0 = DCNNConvLayer(feat_out=Nfeat1, target_size = Nout, ksize=3, input_shape=[32,32,1]     , layer_input = None   , batch_size=batch_size,pooling=1)
-#layers[1], states[1], output1 = DCNNConvLayer(feat_out=Nfeat1, target_size = Nout, ksize=3, input_shape=[32,32,Nfeat1], layer_input = output0, batch_size=batch_size,pooling=1)
-#layers[2], states[2], output2 = DCNNConvLayer(feat_out=Nfeat1, target_size = Nout, ksize=3, input_shape=[32,32,Nfeat1], layer_input = output1, batch_size=batch_size,pooling=2)
-#layers[3], states[3], output3 = DCNNConvLayer(feat_out=Nfeat2, target_size = Nout, ksize=3, input_shape=[16,16,Nfeat1], layer_input = output2, batch_size=batch_size,pooling=1)
-#layers[4], states[4], output4 = DCNNConvLayer(feat_out=Nfeat2, target_size = Nout, ksize=3, input_shape=[16,16,Nfeat2], layer_input = output3, batch_size=batch_size,pooling=1)
-#layers[5], states[5], output5 = DCNNConvLayer(feat_out=Nfeat2, target_size = Nout, ksize=3, input_shape=[16,16,Nfeat2], layer_input = output4, batch_size=batch_size,pooling=2)
-#layers[6], states[6], output6 = DCNNConvLayer(feat_out=Nfeat3, target_size = Nout, ksize=3, input_shape=[8,8,Nfeat2]  , layer_input = output5, batch_size=batch_size,pooling=1)
-#layers[7], states[7], output7 = DCNNConvLayer(feat_out=Nfeat3, target_size = Nout, ksize=1, input_shape=[8,8,Nfeat3]  , layer_input = output6, batch_size=batch_size,pooling=1)
-#layers[8], states[8], output8 = DCNNConvLayer(feat_out=Nfeat3, target_size = Nout, ksize=1, input_shape=[8,8,Nfeat3]  , layer_input = output7, batch_size=batch_size,pooling=1)
 
 if __name__ == '__main__':
     preds = [states[i][5] for i in range(len(states))]
@@ -100,15 +101,16 @@ if __name__ == '__main__':
 
     sess = tf.Session()
     sess.run(tf.initialize_all_variables())
-    gen_train, gen_test = create_data(batch_size=batch_size)
+    gen_train, gen_test = create_data(batch_size=batch_size, chunk_size = T)
 
     acc_train = []
     acc_test = []
-    lr = 50e-5
+    lr = 10e-5
 
+    gen_inputs_test, gen_targets_test = next(gen_test)
     for i in range(nepochs):
-        gen_inputs, gen_targets = gen_train.next()
-        inputs = gen_inputs.reshape(T,batch_size,np.prod(Nin))
+        gen_inputs, gen_targets = next(gen_train)
+        inputs = gen_inputs.swapaxes(0,1)
         targets_original = gen_targets.copy()
         targets = [None]*len(states)
         for j in range(len(states)):
@@ -123,11 +125,10 @@ if __name__ == '__main__':
         ps, _ = sess.run([preds,train_ops], feed_dict)
         accs = [np.mean(p[100:].cumsum(axis=0).argmax(axis=2)==targets_original[100:].cumsum(axis=0).argmax(axis=2)) for p in ps]
         acc_train.append([i]+accs)
-        print(' '.join('{:1.3f}'.format(k) for k in acc_train[-1]))
-        if (i%20)==0:
-            gen_inputs, gen_targets = gen_test.next()
-            inputs = gen_inputs.reshape(T,batch_size,np.prod(Nin))
-            targets_original = gen_targets.copy()
+        print(' Train '.join('{:1.3f}'.format(k) for k in acc_train[-1]))
+        if (i%2)==0:
+            inputs = gen_inputs_test.swapaxes(0,1)
+            targets_original = gen_targets_test.copy()
             targets = [None]*len(states)
             for j in range(len(states)):
                 targets[j] = targets_original #target_convolve(targets_original ,alpha=layers[j].tau,alphas=layers[j].taus)*max_target
@@ -139,5 +140,5 @@ if __name__ == '__main__':
             ps = sess.run(preds,feed_dict)
             accs = [np.mean(p[100:].cumsum(axis=0).argmax(axis=2)==targets_original[100:].cumsum(axis=0).argmax(axis=2)) for p in ps]
             acc_test.append([i]+accs)
-            print(' '.join('{:1.3f}'.format(k) for k in acc_test[-1]))
+            print(' Test  '.join('{:1.3f}'.format(k) for k in acc_test[-1]))
 
