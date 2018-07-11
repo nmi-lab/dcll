@@ -66,10 +66,14 @@ class sequence_generator_sorted(sequence_generator):
         self.num_classes = NUM_CLASSES
         data = data[targets!=0]
         self.bbox = bbox
+        #data_sorted is a list
+        #such that data_sorted[0] contains all data sequences for object 0
+        #such that data_sorted[1] contains all data sequences for object 1 etc.
         self.data_sorted = data
         self.shuffle = shuffle
         self.chunk_size = chunk_size
         self.batch_size = batch_size
+        #number of samples per object class
         self.n = [None for _ in range(self.num_classes)]
         for k in range(self.num_classes):
             self.n[k] = (len(data_sorted[k])
@@ -79,24 +83,22 @@ class sequence_generator_sorted(sequence_generator):
 
     def reset(self):
         self.position = [0 for k in range(self.num_classes)]
-        self.togo = np.concatenate([k*np.ones(self.n[k], dtype='int') for k in range(self.num_classes)])
 
     def __next__(self):
+        #data samples
         mbx = np.zeros([self.batch_size, self.chunk_size]+input_shape)
+        #target samples
         mbt = np.zeros([self.batch_size])
         if self.shuffle:
             #data samples to take
             sequence_size = np.random.multinomial(self.batch_size,self.prior,1)[0]
-        else:
-            raise NotImplementedError()
         count = 0
         if self.shuffle:
             for k,bk in enumerate(sequence_size):
                 if bk>0:
-                    idx = np.random.randint(0,self.n[k])
-                    d = self.data[k][idx].reshape(-1,self.chunk_size,input_shape[0])
-                    mbx[count:count+bk] = d
-                    mbt[count:count+bk] = bbox[k][idx]
+                    idx = np.random.randint(0,self.n[k], size=bk)
+                    mbx[count:count+bk] = #Complete
+                    mbt[count:count+bk] = #Some label (class/bbox/whatever)
         return mbx, expand_targets(keras.utils.to_categorical(mbt, self.num_classes), self.chunk_size)
 
 def create_data(valid = False, chunk_size=CHUNK_SIZE, batch_size=100):
