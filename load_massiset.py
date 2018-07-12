@@ -96,6 +96,7 @@ class sequence_generator_sorted(sequence_generator):
         mbx = np.zeros((self.batch_size, self.chunk_size, input_width, input_height))
         # target samples
         mbt = np.zeros(self.batch_size)
+        # mbt = np.zeros((self.batch_size,4)) BOUNDING BOXES
 
         if self.shuffle:
             # data samples to take
@@ -107,14 +108,15 @@ class sequence_generator_sorted(sequence_generator):
         for k, bk in enumerate(sequence_size):
             if bk > 0:
                 idx = np.random.randint(0, self.n[k], size=bk)
-                mbx[count:count + bk] = self.data_sorted[k][0][idx]
-                mbt[count:count + bk] = self.targets[k][0][idx]
+                mbx[count:count + bk] = self.data_sorted[k][0][0]
+                mbt[count:count + bk] = [k] * bk
+                # mbt[count:count + bk] = self.targets[k][0][0] BOUNDINGBOXES
                 count += bk
         return mbx, expand_targets(keras.utils.to_categorical(mbt, self.num_classes), self.chunk_size)
 
 
 def create_data(valid=False, chunk_size=CHUNK_SIZE, batch_size=100):
-    dataset = h5py.File('/home/eneftci_local/massiset/massiset.hdf5', 'r')
+    dataset = h5py.File('/home/eneftci_local/massiset/massiset.hdf5', 'r') #/Users/massimilianoiacono/Desktop/ripper
     targets_train = [[] for i in range(NUM_CLASSES)]
     data_train = [[] for i in range(NUM_CLASSES)]
     targets_test = [[] for i in range(NUM_CLASSES)]
@@ -150,5 +152,5 @@ def expand_targets(targets, T=500):
 
 if __name__ == '__main__':
     gen_train, gen_test = create_data(batch_size=50)
-    a = gen_train.next()
+    data_batch, target_batch = gen_train.next()
     pass
