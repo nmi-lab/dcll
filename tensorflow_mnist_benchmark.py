@@ -21,6 +21,21 @@ from tensorflow.python.ops import functional_ops
 from npamlib import plotLIF
 from load_mnist import *
 from libdcll import *
+import time
+
+# Explicit tensorflow config gives more control
+gpuid = 0 # An index of which gpu to use. 
+os.environ['KERAS_BACKEND'] = 'tensorflow'
+# Comment the line below and uncomment the line below that to switch from GPU to CPU only execution
+#os.environ['CUDA_VISIBLE_DEVICES'] = "{}".format(gpuid) # (Empty) List of gpu indices that TF can see.
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+CONFIG = tf.ConfigProto(device_count = {'GPU': 1}, log_device_placement=False, allow_soft_placement=False) # Only use a single GPU.
+# Uncomment the two lines below to allow dynamic memory growth rather than having cuda use all available memory from the start
+#CONFIG.gpu_options.allocator_type = 'BFC'
+#CONFIG.gpu_options.allow_growth = True # Prevents tf from grabbing all gpu memory.
+sess = tf.Session(config=CONFIG)
+from keras import backend as K
+K.set_session(sess)
 
 T = 1000
 nepochs = 100
@@ -103,6 +118,8 @@ def build_cnn():
 layers,states = build_cnn()
 
 if __name__ == '__main__':
+    
+    start_t = time.perf_counter()
 
     preds = [states[i][5] for i in range(len(states))]
     train_W_ops = [states[i][-1][-1] for i in range(len(states))]
@@ -119,6 +136,7 @@ if __name__ == '__main__':
     acc_test = []
     lr = 3e-5
 
+    prev_t = start_t
     for i in range(nepochs):
         gen_inputs, gen_targets = image2spiketrain(*gen_train.next(), max_duration=T)
         inputs = gen_inputs
@@ -136,7 +154,8 @@ if __name__ == '__main__':
         ps, _ = sess.run([preds,train_ops], feed_dict)
         accs = [np.mean(p[100:].cumsum(axis=0).argmax(axis=2)==targets_original[100:].cumsum(axis=0).argmax(axis=2)) for p in ps]
         acc_train.append([i]+accs)
-        print(' '.join('{:1.3f}'.format(k) for k in acc_train[-1]))
+        curr_t = time.perf_counter()
+        print(' '.join('{:1.3f}'.format(k) for k in acc_train[-1]) + ' {:.3f}'.format(curr_t-prev_t) + ' seconds')
         if (i%20)==0:
             gen_inputs, gen_targets = image2spiketrain(*gen_test.next(), max_duration=T)
             inputs = gen_inputs
@@ -152,5 +171,11 @@ if __name__ == '__main__':
             ps = sess.run(preds,feed_dict)
             accs = [np.mean(p[100:].cumsum(axis=0).argmax(axis=2)==targets_original[100:].cumsum(axis=0).argmax(axis=2)) for p in ps]
             acc_test.append([i]+accs)
-            print(' '.join('{:1.3f}'.format(k) for k in acc_test[-1]))
+            curr_t = time.perf_counter()
+            print(' '.join('{:1.3f}'.format(k) for k in acc_test[-1]) + ' {:.3f}'.format(curr_t-prev_t) + ' seconds')
+        
+        prev_t = curr_t
+        
+            
+    print("End tensorflow_mnist_benchmark:main , running time: {} seconds".format(time.perf_counter()-start_t))
 
