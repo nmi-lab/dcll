@@ -27,8 +27,8 @@ import time
 gpuid = 0 # An index of which gpu to use. 
 os.environ['KERAS_BACKEND'] = 'tensorflow'
 # Comment the line below and uncomment the line below that to switch from GPU to CPU only execution
-#os.environ['CUDA_VISIBLE_DEVICES'] = "{}".format(gpuid) # (Empty) List of gpu indices that TF can see.
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['CUDA_VISIBLE_DEVICES'] = "{}".format(gpuid) # (Empty) List of gpu indices that TF can see.
+#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 CONFIG = tf.ConfigProto(device_count = {'GPU': 1}, log_device_placement=False, allow_soft_placement=False) # Only use a single GPU.
 # Uncomment the two lines below to allow dynamic memory growth rather than having cuda use all available memory from the start
 #CONFIG.gpu_options.allocator_type = 'BFC'
