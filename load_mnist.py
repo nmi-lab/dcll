@@ -1,4 +1,3 @@
-from keras.datasets import mnist as dset
 import keras
 import numpy as np
 from npamlib import spiketrains
