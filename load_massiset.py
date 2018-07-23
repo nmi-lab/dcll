@@ -12,7 +12,6 @@
 # Licence : GPLv2
 # -----------------------------------------------------------------------------
 import numpy as np
-import keras
 import h5py
 from dvs_timeslices import *
 from collections import Counter
@@ -31,6 +30,19 @@ mapping = {'backpack': 0,
            'scissors': 10,
            }
 
+mapping2 = {0: 'backpack',
+           1: 'ball',
+           2: 'banana',
+           3: 'book',
+           4: 'bottle',
+           5: 'cell_phone',
+           6: 'cup',
+           7: 'keyboard',
+           8: 'mouse',
+           9: 'remote',
+           10: 'scissors',
+           }
+
 NUM_CLASSES = 11
 CHUNK_SIZE = 250
 DELTAT=1000
@@ -38,7 +50,7 @@ TEST_PERCENTAGE = .3
 DOWNSAMPLE = 4
 input_height = 240//DOWNSAMPLE
 input_width = 304//DOWNSAMPLE
-input_shape = [input_width * input_height]
+input_shape = [input_width, input_height]
 
 
 class abstractSequenceGenerator(object):
@@ -51,18 +63,22 @@ class abstractSequenceGenerator(object):
     def next(self):
         return self.__next__()
 
-def expand_targets(targets, T=500, burnin=200):
+def expand_targets(targets, T=500, burnin=0):
     y = np.tile(targets.copy(), [T, 1, 1])
     y[:burnin] = 0
     return y
 
+def one_hot(mbt, num_classes):
+    out = np.zeros([mbt.shape[0], num_classes])
+    out[np.arange(mbt.shape[0], dtype='int'),mbt.astype('int')] = 1
+    return out
+
 class sequence_generator(abstractSequenceGenerator):
-    def __init__(self, targets, data, chunk_size=CHUNK_SIZE, batch_size=32, shuffle=True, nthreads = 12):
+    def __init__(self, targets, data, chunk_size=CHUNK_SIZE, batch_size=32, shuffle=True):
         self.num_classes = NUM_CLASSES
         self.targets = targets
         self.data_sorted = data
         self.shuffle = shuffle
-        self.dt = 1
         self.chunk_size = chunk_size
         self.batch_size = batch_size
         # number of samples per object class
@@ -78,13 +94,13 @@ class sequence_generator(abstractSequenceGenerator):
 
     def create_sample(self, data, i):
         evs_tmp = data[i:]
-        evs = chunk_evs(evs_tmp, deltat = DELTAT, chunk_size = self.chunk_size, size = [input_width,input_height], ds = DOWNSAMPLE)
-        bx = evs.reshape(self.chunk_size,-1)
+        evs = chunk_evs(evs_tmp, deltat = DELTAT, chunk_size = self.chunk_size, size = input_shape, ds = DOWNSAMPLE)
+        bx = evs
         return bx
 
     def __next__(self):
         # data samples
-        mbx = np.zeros((self.batch_size, self.chunk_size, input_width*input_height))
+        mbx = np.zeros((self.batch_size, self.chunk_size, input_width, input_height))
         # target samples
         mbt = np.zeros(self.batch_size)
         # mbt = np.zeros((self.batch_size,4)) BOUNDING BOXES
@@ -104,7 +120,7 @@ class sequence_generator(abstractSequenceGenerator):
                 count += bk
                     
                 # mbt[count:count + bk] = self.targets[k][0][0] BOUNDINGBOXES
-        return mbx, expand_targets(keras.utils.to_categorical(mbt, self.num_classes), self.chunk_size)
+        return mbx, expand_targets(one_hot(mbt, self.num_classes), self.chunk_size)
 
 
 def create_data(valid=False, chunk_size=CHUNK_SIZE, batch_size=100):
