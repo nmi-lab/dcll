@@ -8,7 +8,7 @@
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 import tensorflow as tf
 import numpy as np
 
@@ -28,7 +28,7 @@ def sigmoid(x, k=1, x0=0):
 layer_count = 0
 
 class SNNDenseLayer(object):
-    
+
     def __init__(self,
             layer_size,
             input_size,
@@ -39,7 +39,7 @@ class SNNDenseLayer(object):
             taus = 20,
             name= 'layer1'):
         """ Create a Dense SRM with Local Learning.
-        
+
             Args:
             layer_size: An integer. The number of hidden units.
             input_size: An integer. The number of inputs per time step.
@@ -57,16 +57,16 @@ class SNNDenseLayer(object):
         self.batch_size = batch_size
         self.tau = tau
         self.taus = taus
-        self.alpha = 1-self.deltat/(self.tau*1e-3); #membrane time constant #6ms 
+        self.alpha = 1-self.deltat/(self.tau*1e-3); #membrane time constant #6ms
         self.alphas = 1-self.deltat/(self.taus*1e-3); #synapse time constant
 
         self.mod_lr = tf.placeholder(tf.float32, name = 'mod_lr')
-        
+
         self._inputs = tf.placeholder(tf.float32, shape=[None, batch_size]+[np.prod(input_size)],
                                       name='inputs')
         self._targets = tf.placeholder(tf.float32, shape=[None, batch_size, target_size],
                                        name='targets')
-        limit = np.sqrt(1e-32 / (np.prod(self.layer_size) + np.prod(self.input_size)))        
+        limit = np.sqrt(1e-32 / (np.prod(self.layer_size) + np.prod(self.input_size)))
         self.initializer = tf.random_normal_initializer(0, limit)
         self.lr = lr
         self.tarp = 3
@@ -94,7 +94,7 @@ class SNNDenseLayer(object):
         dtarp_prev    = tf.reshape(states_prev[2], [self.batch_size]+self.layer_size)
         epsilon0_prev = tf.reshape(states_prev[3], [self.batch_size]+self.input_size)
         epsilon_prev  = tf.reshape(states_prev[4], [self.batch_size]+self.input_size)
-        
+
         npsis = XY.shape[1]-self.target_size
         x = tf.reshape(XY[:, :npsis], [self.batch_size]+self.input_size)
         y = tf.reshape(XY[:, npsis:npsis+self.target_size], [self.batch_size, self.target_size])
@@ -105,12 +105,12 @@ class SNNDenseLayer(object):
         alphas = self.alphas
 
         with tf.variable_scope('rnn_block'):
-            isarp = tf.cast(dtarp_prev>0,'float32') 
+            isarp = tf.cast(dtarp_prev>0,'float32')
             self.W_x = W_x = tf.get_variable('W_x'+self.name, shape=self.feature_size, initializer = self.initializer)
             self.b_x = b_x = tf.get_variable('b_x'+self.name, shape=self.feature_size[-1], initializer = self.initializer)
             isyn = self.alphas*isyn_prev + tf.matmul(x, W_x) + b_x
             #isyn=isyn_prev
-            v = alpha*v_prev + isyn  
+            v = alpha*v_prev + isyn
             #v=v_prev
             s = tf.cast(tf.sigmoid(v) > .5, 'float32') * (1-isarp)
             #s = v
@@ -123,18 +123,18 @@ class SNNDenseLayer(object):
             r = tf.sigmoid(tf.matmul(rhat,M)+bM)
             loss = tf.losses.mean_squared_error(tf.stop_gradient(y),r)
 
-            v        = tf.reshape(v,             [self.batch_size, np.prod(self.layer_size)])                 
-            isyn     = tf.reshape(isyn,          [self.batch_size, np.prod(self.layer_size)])                 
-            dtarp    = tf.reshape(dtarp,         [self.batch_size, np.prod(self.layer_size)])                 
-            epsilon0 = tf.reshape(epsilon0 ,     [self.batch_size, np.prod(self.input_size)])                        
-            epsilon  = tf.reshape(epsilon  ,     [self.batch_size, np.prod(self.input_size)])                        
+            v        = tf.reshape(v,             [self.batch_size, np.prod(self.layer_size)])
+            isyn     = tf.reshape(isyn,          [self.batch_size, np.prod(self.layer_size)])
+            dtarp    = tf.reshape(dtarp,         [self.batch_size, np.prod(self.layer_size)])
+            epsilon0 = tf.reshape(epsilon0 ,     [self.batch_size, np.prod(self.input_size)])
+            epsilon  = tf.reshape(epsilon  ,     [self.batch_size, np.prod(self.input_size)])
             r       = tf.reshape(r       , [self.batch_size, self.target_size])
             s_r      = s
             s        = tf.reshape(s_r,[self.batch_size, int(np.prod(self.layer_size)/self.output_factor)])
             gradW     = tf.gradients(loss,[W_x])
             gradb     = tf.gradients(loss,[b_x])
-            doupdateW = tf.assign_add(W_x, -gradW[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1)) 
-            doupdateb = tf.assign_add(b_x, -gradb[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1)) 
+            doupdateW = tf.assign_add(W_x, -gradW[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1))
+            doupdateb = tf.assign_add(b_x, -gradb[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1))
             ##Continuous output
             #output = rhat
             ##Spiking output
@@ -166,22 +166,22 @@ class SNNDenseLayer(object):
     def inputs(self):
         """ A 2-D float32 placeholder with shape `[dynamic_duration, input_size]`. """
         return self._inputs
-    
+
     @property
     def targets(self):
         """ A 2-D float32 placeholder with shape `[dynamic_duration, target_size]`. """
         return self._targets
-    
+
     @property
     def states(self):
         """ A 2-D float32 Tensor with shape `[dynamic_duration, layer_size]`. """
         return self._states
-    
+
     @property
     def predictions(self):
         """ A 2-D float32 Tensor with shape `[dynamic_duration, target_size]`. """
         return self._predictions
-    
+
     @property
     def loss(self):
         """ A 0-D float32 Tensor. """
@@ -200,8 +200,8 @@ class SNNConvLayer(SNNDenseLayer):
             taus = 20,
             name = 'layer1'):
         """ Create a convolutional SRM layer.
-        
-            Args:'__len__', 
+
+            Args:'__len__',
             layer_size: An integer. The number of hidden units.
             input_size: An integer. The number of inputs per time step.
             target_size: An integer. The number of targets per time step.
@@ -240,7 +240,7 @@ class SNNConvLayer(SNNDenseLayer):
         dtarp_prev    = tf.reshape(states_prev[2], [self.batch_size]+self.layer_size)
         epsilon0_prev = tf.reshape(states_prev[3], [self.batch_size]+self.input_size)
         epsilon_prev  = tf.reshape(states_prev[4], [self.batch_size]+self.input_size)
-        
+
         npsis = XY.shape[1]-self.target_size
         x = tf.reshape(XY[:, :npsis], [self.batch_size]+self.input_size)
         y = tf.reshape(XY[:, npsis:npsis+self.target_size], [self.batch_size, self.target_size])
@@ -252,12 +252,12 @@ class SNNConvLayer(SNNDenseLayer):
 
         with tf.variable_scope('rnn_block'):
             #Shape for input
-            isarp = tf.cast(dtarp_prev>0,'float32') 
+            isarp = tf.cast(dtarp_prev>0,'float32')
             self.W_x = W_x = tf.get_variable('W_x'+self.name, shape=self.feature_size, initializer = self.initializer)
             self.b_x = b_x = tf.get_variable('b_x'+self.name, shape=self.feature_size[-1], initializer = self.initializer)
             isyn = self.alphas*isyn_prev + tf.nn.conv2d(x, W_x, [1,1,1,1], padding = "SAME") + b_x
             #isyn = isyn_prev
-            v = alpha*v_prev + isyn  
+            v = alpha*v_prev + isyn
             #v= v_prev
             s = tf.cast(tf.sigmoid(v) > .5, 'float32') * (1-isarp)
             #s=v
@@ -265,9 +265,9 @@ class SNNConvLayer(SNNDenseLayer):
             #dtarp = dtarp_prev
             epsilon0 = alphas*epsilon0_prev + x
             epsilon = alpha*epsilon_prev + epsilon0_prev
-            pv = tf.nn.conv2d(tf.stop_gradient(epsilon), W_x, [1,1,1,1], padding = "SAME") + b_x 
+            pv = tf.nn.conv2d(tf.stop_gradient(epsilon), W_x, [1,1,1,1], padding = "SAME") + b_x
 
-            if self.pooling>1: 
+            if self.pooling>1:
                 s_hat      = tf.layers.max_pooling2d(tf.sigmoid(pv),self.pooling,self.pooling)
             else:
                 s_hat      = tf.sigmoid(pv)
@@ -280,17 +280,17 @@ class SNNConvLayer(SNNDenseLayer):
 #                                         filter_sizes = self.feature_size,
 #                                         strides= [1,1,1,1],
 #                                         padding='SAME')
-            gradW     = tf.gradients(loss,[W_x])[0] 
+            gradW     = tf.gradients(loss,[W_x])[0]
             gradb     = tf.gradients(loss,[b_x])[0]
-            doupdateW = tf.assign_add(self.W_x, -gradW*self.lr*self.mod_lr ) 
-            doupdateb = tf.assign_add(self.b_x, -gradb*self.lr*self.mod_lr ) 
+            doupdateW = tf.assign_add(self.W_x, -gradW*self.lr*self.mod_lr )
+            doupdateb = tf.assign_add(self.b_x, -gradb*self.lr*self.mod_lr )
 
             #Shape for output
-            v        = tf.reshape(v,             [self.batch_size, np.prod(self.layer_size)])                 
-            isyn     = tf.reshape(isyn,          [self.batch_size, np.prod(self.layer_size)])                 
-            dtarp    = tf.reshape(dtarp,         [self.batch_size, np.prod(self.layer_size)])                 
-            epsilon0 = tf.reshape(epsilon0 ,     [self.batch_size, np.prod(self.input_size)])                        
-            epsilon  = tf.reshape(epsilon  ,     [self.batch_size, np.prod(self.input_size)])                        
+            v        = tf.reshape(v,             [self.batch_size, np.prod(self.layer_size)])
+            isyn     = tf.reshape(isyn,          [self.batch_size, np.prod(self.layer_size)])
+            dtarp    = tf.reshape(dtarp,         [self.batch_size, np.prod(self.layer_size)])
+            epsilon0 = tf.reshape(epsilon0 ,     [self.batch_size, np.prod(self.input_size)])
+            epsilon  = tf.reshape(epsilon  ,     [self.batch_size, np.prod(self.input_size)])
             r        = tf.reshape(r        ,     [self.batch_size, self.target_size])
             s        = tf.reshape(tf.layers.max_pooling2d(s,self.pooling,self.pooling),[self.batch_size, -1])
 
@@ -309,7 +309,7 @@ def DCNNConvLayer(feat_out, input_shape, ksize=5, pooling=2,  target_size=11, la
     print (input_shape)
     print (Nin)
     print (Nhid)
-        
+
     layer = SNNConvLayer(layer_size=Nhid, input_size=Nin, feature_size=[ksize,ksize,feat_in, feat_out], target_size=target_size, batch_size = batch_size, pooling=pooling, lr = 1.0, name='layer'+str(layer_count), tau=tau, taus=taus)
 
     if layer_input is not None:
@@ -328,7 +328,7 @@ def DCNNDenseLayer(feat_out, input_shape, layer_input=None, batch_size = 64, tar
     print (input_shape)
     print (Nin)
     print (Nhid)
-        
+
     layer = SNNDenseLayer(layer_size=Nhid, input_size=Nin, target_size=target_size, batch_size = batch_size, lr = 1.0, name='layer'+str(layer_count), tau=tau, taus=taus)
 
     if layer_input is not None:
@@ -426,41 +426,3 @@ def mksavedir(pre='Results/', exp_dir=None):
 
     print(("Created experiment directory {0}".format(directory)))
     return directory
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

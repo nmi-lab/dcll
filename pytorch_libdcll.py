@@ -4,11 +4,11 @@
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : 
+# Last Modified :
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -26,7 +26,7 @@ class CLLDenseFunction(autograd.Function):
     def forward(ctx, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, weight, bias=None, alpha = .95, alphas=.8):
         isyn = alphas*prev_isyn + torch.addmm(bias,input, weight.t())
         vmem = alpha*prev_vmem + isyn
-        eps0 = alphas*prev_eps0 + input 
+        eps0 = alphas*prev_eps0 + input
         eps1 = alpha*prev_eps1 + eps0
         pv = torch.addmm(bias, eps1, weight.t())
         output = (torch.sigmoid(vmem) > .5).float()
@@ -64,14 +64,14 @@ class CLLDenseModule(nn.Module):
         self.weight.data.uniform_(-stdv, stdv)
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
-        
+
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
         f = CLLDenseFunction.apply
         isyn, vmem, eps0, eps1, output, pv = f(input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, self.weight, self.bias, self.alpha, self.alphas)
         return isyn, vmem, eps0, eps1, output, pv
 
     def init_prev(self, batch_size, im_width, im_height):
-        return torch.zeros(batch_size, self.out_channels) 
+        return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=10):
@@ -112,7 +112,7 @@ class DenseDCLLlayer(nn.Module):
         self.i2o.weight.data = self.M.t()
         limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
-              
+
 
 #class CLLConv2DFunction(autograd.Function):
 #    @staticmethod
@@ -169,7 +169,7 @@ class CLLConv2DModule(nn.Module):
         self.weight.data.uniform_(-stdv, stdv)
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
-        
+
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
         isyn = F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
         isyn += self.alphas*prev_isyn
@@ -182,7 +182,7 @@ class CLLConv2DModule(nn.Module):
         return isyn, vmem, eps0, eps1, output, pv
 
     def init_prev(self, batch_size, im_width, im_height):
-        return torch.zeros(batch_size, self.in_channels, im_width, im_height) 
+        return torch.zeros(batch_size, self.in_channels, im_width, im_height)
 
 
 class Conv2dDCLLlayer(nn.Module):
@@ -232,15 +232,11 @@ class Conv2dDCLLlayer(nn.Module):
         limit = 1e-32
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels, self.kernel_size, self.kernel_size])).t().float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
-          
 
-                                   
+
+
 
 
 if __name__ == '__main__':
     #Test dense gradient
     f = CLLDenseFunction.apply
-
-
-
-
