@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/env python
 #-----------------------------------------------------------------------------
 # File Name : spikeConv2d.py
 # Author: Emre Neftci
@@ -19,7 +19,8 @@ import torchvision.transforms as transforms
 from torch.nn import functional as F
 import numpy as np
 
-device = 'cuda:1'
+# if gpu is to be used
+device = 'cuda:0'
 
 class CLLDenseFunction(autograd.Function):
     @staticmethod
