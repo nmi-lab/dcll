@@ -172,6 +172,8 @@ class CLLConv2DModule(nn.Module):
             self.bias.data.uniform_(-stdv, stdv)
 
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
+        # input: input tensor of shape (minibatch x in_channels x iH x iW)
+        # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
         isyn = F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
         isyn += self.alphas*prev_isyn
         vmem = self.alpha*prev_vmem + isyn
@@ -231,7 +233,7 @@ class Conv2dDCLLlayer(nn.Module):
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.output_size])).float()
         self.i2o.weight.data = self.M.t()
         limit = 1e-32
-        self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels, self.kernel_size, self.kernel_size])).t().float()
+        self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
 
