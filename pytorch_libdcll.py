@@ -13,35 +13,33 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import torchvision
 from torch import autograd
-import torchvision.transforms as transforms
 from torch.nn import functional as F
 import numpy as np
 
-device = 'cuda:1'
+device = 'cuda:0'
 
-class CLLDenseFunction(autograd.Function):
-    @staticmethod
-    def forward(ctx, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, weight, bias=None, alpha = .95, alphas=.8):
-        isyn = alphas*prev_isyn + torch.addmm(bias,input, weight.t())
-        vmem = alpha*prev_vmem + isyn
-        eps0 = alphas*prev_eps0 + input 
-        eps1 = alpha*prev_eps1 + eps0
-        pv = torch.addmm(bias, eps1, weight.t())
-        output = (torch.sigmoid(vmem) > .5).float()
-        #ctx.save_for_backward(input, isyn, vmem, eps0, eps1, output, weight, bias)
-        ctx.save_for_backward(input, pv, weight, bias)
-        return isyn, vmem, eps0, eps1, output, pv
-
-    @staticmethod
-    def backward(ctx, *grad_output):
-        #input, isyn, vmem, eps0, eps1, output, weight, bias = ctx.saved_tensors
-        input, pv, weight, bias = ctx.saved_tensors
-        grad_weights =  torch.mm(grad_output[-1].t(), input)
-        grad_bias =  torch.mm(grad_output[-1].t(), torch.ones_like(input)).sum(1)
-        #grad_input = nn.grad.conv2d_input(input.shape, weight, grad_output[1], bias=bias, padding=2)
-        return None, None, None, None, None, grad_weights, grad_bias, None, None
+#class CLLDenseFunction(autograd.Function):
+#    @staticmethod
+#    def forward(ctx, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, weight, bias=None, alpha = .95, alphas=.8):
+#        isyn = alphas*prev_isyn + torch.addmm(bias,input, weight.t())
+#        vmem = alpha*prev_vmem + isyn
+#        eps0 = alphas*prev_eps0 + input 
+#        eps1 = alpha*prev_eps1 + eps0
+#        pv = torch.addmm(bias, eps1, weight.t())
+#        output = (torch.sigmoid(vmem) > .5).float()
+#        #ctx.save_for_backward(input, isyn, vmem, eps0, eps1, output, weight, bias)
+#        ctx.save_for_backward(input, pv, weight, bias)
+#        return isyn, vmem, eps0, eps1, output, pv
+#
+#    @staticmethod
+#    def backward(ctx, *grad_output):
+#        #input, isyn, vmem, eps0, eps1, output, weight, bias = ctx.saved_tensors
+#        input, pv, weight, bias = ctx.saved_tensors
+#        grad_weights =  torch.mm(grad_output[-1].t(), input)
+#        grad_bias =  torch.mm(grad_output[-1].t(), torch.ones_like(input)).sum(1)
+#        #grad_input = nn.grad.conv2d_input(input.shape, weight, grad_output[1], bias=bias, padding=2)
+#        return None, None, None, None, None, grad_weights, grad_bias, None, None
 
 class CLLDenseModule(nn.Module):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .9, alphas=.85):
@@ -138,7 +136,7 @@ class DenseDCLLlayer(nn.Module):
 #
 
 class CLLConv2DModule(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9, pooling = 1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9):
         super(CLLConv2DModule, self).__init__()
         if in_channels % groups != 0:
             raise ValueError('in_channels must be divisible by groups')

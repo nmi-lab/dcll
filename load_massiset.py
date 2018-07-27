@@ -124,7 +124,7 @@ class sequence_generator(abstractSequenceGenerator):
 
 
 def create_data(valid=False, chunk_size=CHUNK_SIZE, batch_size=100):
-    dataset = h5py.File('/home/eneftci_local/Projects/share/data/massiset/massiset_sparse.hdf5', 'r') #/Users/massimilianoiacono/Desktop/ripper
+    dataset = h5py.File('/share/data/massiset/massiset_sparse.hdf5', 'r') #/Users/massimilianoiacono/Desktop/ripper
     targets_train = [[] for i in range(NUM_CLASSES)]
     data_train = [[] for i in range(NUM_CLASSES)]
     targets_test = [[] for i in range(NUM_CLASSES)]
