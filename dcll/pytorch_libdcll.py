@@ -22,27 +22,27 @@ import numpy as np
 # if gpu is to be used
 device = 'cuda:0'
 
-class CLLDenseFunction(autograd.Function):
-    @staticmethod
-    def forward(ctx, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, weight, bias=None, alpha = .95, alphas=.8):
-        isyn = alphas*prev_isyn + torch.addmm(bias,input, weight.t())
-        vmem = alpha*prev_vmem + isyn
-        eps0 = alphas*prev_eps0 + input
-        eps1 = alpha*prev_eps1 + eps0
-        pv = torch.addmm(bias, eps1, weight.t())
-        output = (torch.sigmoid(vmem) > .5).float()
-        #ctx.save_for_backward(input, isyn, vmem, eps0, eps1, output, weight, bias)
-        ctx.save_for_backward(input, pv, weight, bias)
-        return isyn, vmem, eps0, eps1, output, pv
+# class CLLDenseFunction(autograd.Function):
+#     @staticmethod
+#     def forward(ctx, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, weight, bias=None, alpha = .95, alphas=.8):
+#         isyn = alphas*prev_isyn + torch.addmm(bias,input, weight.t())
+#         vmem = alpha*prev_vmem + isyn
+#         eps0 = alphas*prev_eps0 + input
+#         eps1 = alpha*prev_eps1 + eps0
+#         pv = torch.addmm(bias, eps1, weight.t())
+#         output = (torch.sigmoid(vmem) > .5).float()
+#         #ctx.save_for_backward(input, isyn, vmem, eps0, eps1, output, weight, bias)
+#         ctx.save_for_backward(input, pv, weight, bias)
+#         return isyn, vmem, eps0, eps1, output, pv
 
-    @staticmethod
-    def backward(ctx, *grad_output):
-        #input, isyn, vmem, eps0, eps1, output, weight, bias = ctx.saved_tensors
-        input, pv, weight, bias = ctx.saved_tensors
-        grad_weights =  torch.mm(grad_output[-1].t(), input)
-        grad_bias =  torch.mm(grad_output[-1].t(), torch.ones_like(input)).sum(1)
-        #grad_input = nn.grad.conv2d_input(input.shape, weight, grad_output[1], bias=bias, padding=2)
-        return None, None, None, None, None, grad_weights, grad_bias, None, None
+#     @staticmethod
+#     def backward(ctx, *grad_output):
+#         #input, isyn, vmem, eps0, eps1, output, weight, bias = ctx.saved_tensors
+#         input, pv, weight, bias = ctx.saved_tensors
+#         grad_weights =  torch.mm(grad_output[-1].t(), input)
+#         grad_bias =  torch.mm(grad_output[-1].t(), torch.ones_like(input)).sum(1)
+#         #grad_input = nn.grad.conv2d_input(input.shape, weight, grad_output[1], bias=bias, padding=2)
+#         return None, None, None, None, None, grad_weights, grad_bias, None, None
 
 class CLLDenseModule(nn.Module):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .9, alphas=.85):
@@ -67,8 +67,16 @@ class CLLDenseModule(nn.Module):
             self.bias.data.uniform_(-stdv, stdv)
 
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
-        f = CLLDenseFunction.apply
-        isyn, vmem, eps0, eps1, output, pv = f(input, prev_isyn, prev_vmem, prev_eps0, prev_eps1, self.weight, self.bias, self.alpha, self.alphas)
+        # input: input tensor of shape (minibatch x in_channels x iH x iW)
+        # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
+        isyn = F.linear(input, self.weight, self.bias)
+        isyn += self.alphas*prev_isyn
+        vmem = self.alpha*prev_vmem + isyn
+        eps0 = input + self.alphas*prev_eps0
+        eps1 = self.alpha*prev_eps1 + eps0
+        eps1 = eps1.detach()
+        pv = F.linear(eps1, self.weight, self.bias)
+        output = (vmem > 0).float()
         return isyn, vmem, eps0, eps1, output, pv
 
     def init_prev(self, batch_size, im_width, im_height):
@@ -83,10 +91,10 @@ class DenseDCLLlayer(nn.Module):
         self.out_channels = out_channels
         self.output_size = output_size
         self.i2h = CLLDenseModule(in_channels,out_channels)
-        self.i2o = nn.Linear(out_channels, output_size, bias=None)
+        self.i2o = nn.Linear(out_channels, output_size)
         self.i2o.weight.requires_grad = False
-        #self.i2o.bias.requires_grad = False
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.i2o.bias.requires_grad = False
+        # self.softmax = nn.LogSoftmax(dim=1)
         self.init_dcll()
 
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
@@ -97,7 +105,8 @@ class DenseDCLLlayer(nn.Module):
         prev_eps1 = prev_eps1.detach()
         isyn, vmem, eps0, eps1, output, pv = self.i2h(input, prev_isyn, prev_vmem, prev_eps0, prev_eps1)
         flatten = pv.view(-1,self.out_channels)
-        pvoutput = self.softmax(self.i2o(flatten))
+        pvoutput = torch.sigmoid(self.i2o(flatten))
+        # pvoutput = self.softmax(self.i2o(flatten))
         return isyn, vmem, eps0, eps1, output, pvoutput
 
     def init_hiddens(self, batch_size):
@@ -113,6 +122,7 @@ class DenseDCLLlayer(nn.Module):
         self.i2o.weight.data = self.M.t()
         limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
+        self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
 
 #class CLLConv2DFunction(autograd.Function):
@@ -235,7 +245,6 @@ class Conv2dDCLLlayer(nn.Module):
         limit = 1e-32
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
-
 
 
 
