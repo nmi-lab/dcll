@@ -28,10 +28,10 @@ from load_dvs_gestures import *
 from libdcll import *
 
 
-Nfeat1=16
-Nfeat2=32
-Nfeat3=48
-Nfeat4=64
+Nfeat1=32
+Nfeat2=64
+Nfeat3=96
+Nfeat4=128
 Nfeat5=64
 
 Nin = [32,32,1]
@@ -47,7 +47,7 @@ max_target = .9
 batch_size = 64
 
 
-max_layers = 4
+max_layers = 3
 layers = [None for i in range(max_layers)]
 states = [None for i in range(max_layers)]
 
@@ -81,15 +81,15 @@ layers[2], states[2], output2 = DCNNConvLayer(feat_out=Nfeat3,
         taus = 20,
         pooling=1)
 
-layers[3], states[3], output3 = DCNNConvLayer(feat_out=Nfeat4,
-        ksize=7,
-        input_shape=[8, 8,Nfeat3],
-        target_size = Nout,
-        layer_input = output2,
-        batch_size=batch_size,
-        tau = 10,
-        taus = 20,
-        pooling=2)
+#layers[3], states[3], output3 = DCNNConvLayer(feat_out=Nfeat4,
+#        ksize=7,
+#        input_shape=[8, 8,Nfeat3],
+#        target_size = Nout,
+#        layer_input = output2,
+#        batch_size=batch_size,
+#        tau = 10,
+#        taus = 20,
+#        pooling=2)
 
 
 

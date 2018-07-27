@@ -133,8 +133,8 @@ class SNNDenseLayer(object):
             s        = tf.reshape(s_r,[self.batch_size, int(np.prod(self.layer_size)/self.output_factor)])
             gradW     = tf.gradients(loss,[W_x])
             gradb     = tf.gradients(loss,[b_x])
-            doupdateW = tf.assign_add(self.W_x, -gradW[0]*self.lr*self.mod_lr) 
-            doupdateb = tf.assign_add(self.b_x, -gradb[0]*self.lr*self.mod_lr) 
+            doupdateW = tf.assign_add(W_x, -gradW[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1)) 
+            doupdateb = tf.assign_add(b_x, -gradb[0]*self.lr*self.mod_lr*tf.reduce_sum(y,axis=1)) 
             ##Continuous output
             #output = rhat
             ##Spiking output
@@ -251,6 +251,7 @@ class SNNConvLayer(SNNDenseLayer):
         alphas = self.alphas
 
         with tf.variable_scope('rnn_block'):
+            #Shape for input
             isarp = tf.cast(dtarp_prev>0,'float32') 
             self.W_x = W_x = tf.get_variable('W_x'+self.name, shape=self.feature_size, initializer = self.initializer)
             self.b_x = b_x = tf.get_variable('b_x'+self.name, shape=self.feature_size[-1], initializer = self.initializer)
@@ -273,22 +274,26 @@ class SNNConvLayer(SNNDenseLayer):
             rhat = tf.reshape(s_hat,[self.batch_size,-1])
             r = tf.sigmoid(tf.matmul(rhat,M)+bM)
             loss = tf.losses.mean_squared_error(tf.stop_gradient(y),r)
+#            reg = tf.nn.conv2d_backprop_filter(
+#                                         input = tf.ones_like(x),
+#                                         out_backprop = tf.pow(tf.sigmoid(v-.5),4),
+#                                         filter_sizes = self.feature_size,
+#                                         strides= [1,1,1,1],
+#                                         padding='SAME')
+            gradW     = tf.gradients(loss,[W_x])[0] 
+            gradb     = tf.gradients(loss,[b_x])[0]
+            doupdateW = tf.assign_add(self.W_x, -gradW*self.lr*self.mod_lr ) 
+            doupdateb = tf.assign_add(self.b_x, -gradb*self.lr*self.mod_lr ) 
 
+            #Shape for output
             v        = tf.reshape(v,             [self.batch_size, np.prod(self.layer_size)])                 
             isyn     = tf.reshape(isyn,          [self.batch_size, np.prod(self.layer_size)])                 
             dtarp    = tf.reshape(dtarp,         [self.batch_size, np.prod(self.layer_size)])                 
             epsilon0 = tf.reshape(epsilon0 ,     [self.batch_size, np.prod(self.input_size)])                        
             epsilon  = tf.reshape(epsilon  ,     [self.batch_size, np.prod(self.input_size)])                        
-            r       = tf.reshape(r         ,     [self.batch_size, self.target_size])
-
+            r        = tf.reshape(r        ,     [self.batch_size, self.target_size])
             s        = tf.reshape(tf.layers.max_pooling2d(s,self.pooling,self.pooling),[self.batch_size, -1])
-            gradW     = tf.gradients(loss,[W_x])
-            gradb     = tf.gradients(loss,[b_x])
-            doupdateW = tf.assign_add(self.W_x, -gradW[0]*self.lr*self.mod_lr) 
-            doupdateb = tf.assign_add(self.b_x, -gradb[0]*self.lr*self.mod_lr) 
-            ##Continuous output
-            #output = rhat
-            ##Spiking output
+
             output = s
 
 
