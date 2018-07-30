@@ -18,6 +18,8 @@ from torch import autograd
 import torchvision.transforms as transforms
 from torch.nn import functional as F
 import numpy as np
+from collections import namedtuple
+import logging
 
 # if gpu is to be used
 device = 'cuda:0'
@@ -44,6 +46,11 @@ device = 'cuda:0'
 #         #grad_input = nn.grad.conv2d_input(input.shape, weight, grad_output[1], bias=bias, padding=2)
 #         return None, None, None, None, None, grad_weights, grad_bias, None, None
 
+
+NeuronState = namedtuple(
+    'NeuronState', ('isyn', 'vmem', 'eps0', 'eps1'))
+
+
 class CLLDenseModule(nn.Module):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .9, alphas=.85):
         super(CLLDenseModule, self).__init__()
@@ -57,6 +64,7 @@ class CLLDenseModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
+        self.init_state(1)
 
     def reset_parameters(self):
         import math
@@ -66,25 +74,45 @@ class CLLDenseModule(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
+    def init_state(self, batch_size):
+        self.state = NeuronState(
+            isyn = torch.zeros(batch_size, self.out_channels).detach().to(device),
+            vmem = torch.zeros(batch_size, self.out_channels).detach().to(device),
+            eps0 = torch.zeros(batch_size, self.in_channels ).detach().to(device),
+            eps1 = torch.zeros(batch_size, self.in_channels ).detach().to(device)
+            )
+
+    def forward(self, input):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
         # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
+        if not (input.shape[0] == self.state.isyn.shape[0] == self.state.vmem.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
+            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+                            .format(self.state.isyn.shape[0], input.shape[0]))
+            self.init_state(input.shape[0])
+
         isyn = F.linear(input, self.weight, self.bias)
-        isyn += self.alphas*prev_isyn
-        vmem = self.alpha*prev_vmem + isyn
-        eps0 = input + self.alphas*prev_eps0
-        eps1 = self.alpha*prev_eps1 + eps0
+        isyn += self.alphas*self.state.isyn
+        vmem = self.alpha*self.state.vmem + isyn
+        eps0 = input + self.alphas*self.state.eps0
+        eps1 = self.alpha*self.state.eps1 + eps0
         eps1 = eps1.detach()
         pv = F.linear(eps1, self.weight, self.bias)
         output = (vmem > 0).float()
-        return isyn, vmem, eps0, eps1, output, pv
+        # update the neuronal state
+        self.state = NeuronState(isyn=isyn.detach(),
+                                 vmem=vmem.detach(),
+                                 eps0=eps0.detach(),
+                                 eps1=eps1.detach())
+        return output, pv
 
     def init_prev(self, batch_size, im_width, im_height):
         return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=10):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=None):
         super(DenseDCLLlayer, self).__init__()
+        if output_size is None:
+            output_size = out_channels
         self.im_width = im_width
         self.im_height = im_height
         self.in_channels = in_channels
@@ -97,24 +125,16 @@ class DenseDCLLlayer(nn.Module):
         # self.softmax = nn.LogSoftmax(dim=1)
         self.init_dcll()
 
-    def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
-        input     = input    .detach()
-        prev_isyn = prev_isyn.detach()
-        prev_vmem = prev_vmem.detach()
-        prev_eps0 = prev_eps0.detach()
-        prev_eps1 = prev_eps1.detach()
-        isyn, vmem, eps0, eps1, output, pv = self.i2h(input, prev_isyn, prev_vmem, prev_eps0, prev_eps1)
-        flatten = pv.view(-1,self.out_channels)
-        pvoutput = torch.sigmoid(self.i2o(flatten))
+    def forward(self, input):
+        input     = input.detach()
+        output, pv = self.i2h(input)
+        pvoutput = torch.sigmoid(self.i2o(pv))
         # pvoutput = self.softmax(self.i2o(flatten))
-        return isyn, vmem, eps0, eps1, output, pvoutput
+        return output, pvoutput
 
     def init_hiddens(self, batch_size):
-        isyn = torch.zeros(batch_size, self.out_channels).to(device)
-        vmem = torch.zeros(batch_size, self.out_channels).to(device)
-        eps0 = torch.zeros(batch_size, self.in_channels ).to(device)
-        eps1 = torch.zeros(batch_size, self.in_channels ).to(device)
-        return isyn, vmem, eps0, eps1
+        self.i2h.init_state(batch_size)
+        return self
 
     def init_dcll(self):
         limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.output_size))
@@ -157,11 +177,16 @@ class CLLConv2DModule(nn.Module):
             raise ValueError('out_channels must be divisible by groups')
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.kernel_size = (kernel_size, kernel_size)
+
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+
+        self.kernel_size = kernel_size
         self.stride = stride
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
+
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
         if bias:
             self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
