@@ -37,9 +37,9 @@ if __name__ == '__main__':
     criterion = nn.MSELoss().to(device)
     optimizer = optim.SGD([layer1.i2h.weight, layer2.i2h.weight, layer3.i2h.weight] + [layer1.i2h.bias, layer2.i2h.bias, layer3.i2h.bias], lr=5e-5)
 
-    isyn1, vmem1, eps01, eps11 = layer1.init_hiddens(batch_size)
-    isyn2, vmem2, eps02, eps12 = layer2.init_hiddens(batch_size)
-    isyn3, vmem3, eps03, eps13 = layer3.init_hiddens(batch_size)
+    layer1.init_hiddens(batch_size)
+    layer2.init_hiddens(batch_size)
+    layer3.init_hiddens(batch_size)
 
     avg_loss1 = 0
     avg_loss2 = 0
@@ -64,9 +64,9 @@ if __name__ == '__main__':
                 layer2.zero_grad()
                 layer3.zero_grad()
 
-            isyn1, vmem1, eps01, eps11, output1, pvoutput1 = layer1.forward(input[iter], isyn1, vmem1, eps01, eps11)
-            isyn2, vmem2, eps02, eps12, output2, pvoutput2 = layer2.forward(output1, isyn2, vmem2, eps02, eps12)
-            isyn3, vmem3, eps03, eps13, output3, pvoutput3 = layer3.forward(output2, isyn3, vmem3, eps03, eps13)
+            output1, pvoutput1 = layer1.forward(input[iter])
+            output2, pvoutput2 = layer2.forward(output1)
+            output3, pvoutput3 = layer3.forward(output2)
 
             if iter>150:
                 losses1 = criterion(pvoutput1, labels1h[-1])
@@ -102,9 +102,9 @@ if __name__ == '__main__':
         # labels1h = torch.Tensor(labels1h).to(device)
 
         for iter in range(n_iters-100):
-            isyn1, vmem1, eps01, eps11, output1, pvoutput1_test = layer1.forward(input[iter], isyn1, vmem1, eps01, eps11)
-            isyn2, vmem2, eps02, eps12, output2, pvoutput2_test = layer2.forward(output1, isyn2, vmem2, eps02, eps12)
-            isyn3, vmem3, eps03, eps13, output3, pvoutput3_test = layer3.forward(output2, isyn3, vmem3, eps03, eps13)
+            output1, pvoutput1_test = layer1.forward(input[iter])
+            output2, pvoutput2_test = layer2.forward(output1)
+            output3, pvoutput3_test = layer3.forward(output2)
 
 
             losses1 = criterion(pvoutput1, labels1h[-1])
