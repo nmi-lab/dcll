@@ -1,14 +1,14 @@
 #!/bin/python
 #-----------------------------------------------------------------------------
-# File Name : experimentTools.py
+# File Name : experiment_tools.py
 # Author: Emre Neftci
 #
 # Creation Date : Thu 26 Jul 2018 09:13:34 AM PDT
-# Last Modified : 
+# Last Modified :
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 import numpy as np
 
 def accuracy(model, x_test, y_test):
@@ -100,17 +100,3 @@ def mksavedir(pre='Results/', exp_dir=None):
 
     print(("Created experiment directory {0}".format(directory)))
     return directory
-
-
-
-
-
-
-
-
-
-
-
-
-
-
