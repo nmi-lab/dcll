@@ -45,6 +45,14 @@ if __name__ == '__main__':
     avg_loss2 = 0
     avg_loss3 = 0
 
+    def get_module_params(layer):
+        ret = {
+            name: param.clone().cpu().data.numpy().flatten()
+            for (name, param) in layer.named_parameters()
+            if param.requires_grad
+        }
+        return ret
+
     from dcll.load_mnist import *
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = batch_size)
 
@@ -130,6 +138,11 @@ if __name__ == '__main__':
         writer.add_scalar('test/acc/layer1', avg_acc1, epoch)
         writer.add_scalar('test/acc/layer2', avg_acc2, epoch)
         writer.add_scalar('test/acc/layer3', avg_acc3, epoch)
+
+        for i, l in enumerate([layer1, layer2, layer3]):
+            current_params = get_module_params(l)
+            for name, param in current_params.iteritems():
+                writer.add_histogram('Layer'+str(i)+'_'+name, param, iter, bins='auto')
 
         print('Test Epoch {0}: L1 {1:1.3} L2 {2:1.3} L3{3:1.3} Acc1 {4:1.3} Acc2 {5:1.3} Acc3 {6:1.3}'.format(epoch, avg_loss1, avg_loss2, avg_loss3, avg_acc1, avg_acc2, avg_acc3))
 

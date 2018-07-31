@@ -61,7 +61,6 @@ class CLLDenseModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
-        self.init_state(1)
 
     def reset_parameters(self):
         import math
