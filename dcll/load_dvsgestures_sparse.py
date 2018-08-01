@@ -11,11 +11,9 @@
 import struct
 import numpy as np
 import scipy.misc
-import numpy as np
 import h5py
 import glob
-from experimentTools import *
-from dvs_timeslices import *
+from .events_timeslices import *
 
 mapping = { 0 :'Hand Clapping'  ,
             1 :'Right Hand Wave',
