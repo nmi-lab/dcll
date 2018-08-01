@@ -1,10 +1,10 @@
 #!/bin/python
-#-----------------------------------------------------------------------------
+#lop-----------------------------------------------------------------------------
 # File Name : spikeConv2d.py
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : 
+# Last Modified : Sat 28 Jul 2018 09:19:53 PM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
@@ -175,7 +175,7 @@ class CLLConv2DModule(nn.Module):
         eps0 = input + self.alphas*prev_eps0
         eps1 = self.alpha*prev_eps1 + eps0
         eps1 = eps1.detach()
-        pv = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        pv = torch.sigmoid(F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups))
         output = (vmem > 0).float()
         return isyn, vmem, eps0, eps1, output, pv
 
@@ -184,35 +184,40 @@ class CLLConv2DModule(nn.Module):
 
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=10, pooling=1, padding = 2):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=10, pooling=1, padding = 2, alpha=.95, alphas=.9):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.pooling = pooling
-        self.pool = nn.MaxPool2d(pooling, stride=pooling)
+        if pooling>1:
+            self.pooling = pooling
+            self.pool = nn.MaxPool2d(kernel_size=pooling, stride=pooling, padding=0)
+        else:
+            self.pooling = pooling
+            self.pool = lambda x: x
         self.kernel_size = kernel_size
         self.output_size = output_size
-        self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//pooling**2, output_size)
+        self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
+        self.i2o = nn.Linear(im_height*im_width*out_channels//pooling**2, output_size, bias=False)
         self.i2o.weight.requires_grad = False
-        self.i2o.bias.requires_grad = False
-        self.softmax = nn.LogSoftmax(dim=1)
+        #self.i2o.bias.requires_grad = False
+        #self.softmax = nn.LogSoftmax(dim=1)
         self.init_dcll()
 
     def forward(self, input, prev_isyn, prev_vmem, prev_eps0, prev_eps1):
         input     = input.detach()
-        pooling = self.pooling
         prev_isyn = prev_isyn.detach()
         prev_vmem = prev_vmem.detach()
         prev_eps0 = prev_eps0.detach()
         prev_eps1 = prev_eps1.detach()
         isyn, vmem, eps0, eps1, output, pv = self.i2h(input, prev_isyn, prev_vmem, prev_eps0, prev_eps1)
-        flatten = self.pool(torch.sigmoid(pv)).view(-1,self.im_height*self.im_width*self.out_channels//pooling**2)
+        pvp = self.pool(pv)
+        flatten = pvp.view(-1,self.im_height*self.im_width*self.out_channels//self.pooling**2)
         pvoutput = torch.sigmoid(self.i2o(flatten))
-        output = output.detach()
-        return isyn, vmem, eps0, eps1, self.pool(output), pvoutput
+        output = (pvp>0.5).float().detach()
+        #output = pvp.float().detach()
+        return isyn, vmem, eps0, eps1, output, pvoutput
 
     def init_hiddens(self, batch_size):
         isyn = torch.zeros(batch_size, self.out_channels, self.im_width, self.im_height).to(device)
@@ -222,8 +227,7 @@ class Conv2dDCLLlayer(nn.Module):
         return isyn, vmem, eps0, eps1
 
     def init_dcll(self):
-        pooling = self.pooling
-        nh = int(self.im_height*self.im_width*self.out_channels//pooling**2)
+        nh = int(self.im_height*self.im_width*self.out_channels//self.pooling**2)
         limit = np.sqrt(6.0 / (nh + self.output_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.output_size])).float()
         self.i2o.weight.data = self.M.t()

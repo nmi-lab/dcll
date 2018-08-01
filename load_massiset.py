@@ -63,16 +63,6 @@ class abstractSequenceGenerator(object):
     def next(self):
         return self.__next__()
 
-def expand_targets(targets, T=500, burnin=0):
-    y = np.tile(targets.copy(), [T, 1, 1])
-    y[:burnin] = 0
-    return y
-
-def one_hot(mbt, num_classes):
-    out = np.zeros([mbt.shape[0], num_classes])
-    out[np.arange(mbt.shape[0], dtype='int'),mbt.astype('int')] = 1
-    return out
-
 class sequence_generator(abstractSequenceGenerator):
     def __init__(self, targets, data, chunk_size=CHUNK_SIZE, batch_size=32, shuffle=True):
         self.num_classes = NUM_CLASSES
