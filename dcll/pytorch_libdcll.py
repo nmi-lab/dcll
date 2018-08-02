@@ -212,7 +212,7 @@ class CLLConv2DModule(nn.Module):
         eps0 = input + self.alphas * self.state.eps0
         eps1 = self.alpha * self.state.eps1 + eps0
         eps1 = eps1.detach()
-        pv = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        pv = torch.sigmoid(F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups))
         output = (vmem > 0).float()
         # update the neuronal state
         self.state = NeuronState(isyn=isyn.detach(),
