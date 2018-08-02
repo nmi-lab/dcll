@@ -103,8 +103,8 @@ class CLLDenseModule(nn.Module):
                                  eps1=eps1.detach())
         return output, pv
 
-    def init_prev(self, batch_size, im_width, im_height):
-        return torch.zeros(batch_size, self.out_channels)
+    #def init_prev(self, batch_size, im_width, im_height):
+    #    return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, alpha=.9, alphas = .85):
