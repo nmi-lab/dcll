@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/env python
 #-----------------------------------------------------------------------------
 # File Name : npamlib.py
 # Author: Emre Neftci, Ryan Stokes
