@@ -44,7 +44,7 @@ def accuracy_by_mean(pvoutput, labels):
 
 
 # if gpu is to be used
-device = 'cuda:0'
+device = 'cuda'
 
 NeuronState = namedtuple(
     'NeuronState', ('isyn', 'vmem', 'eps0', 'eps1'))
@@ -71,12 +71,12 @@ class CLLDenseModule(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def init_state(self, batch_size):
+    def init_state(self, batch_size, init_value = 0):
         self.state = NeuronState(
-            isyn = torch.zeros(batch_size, self.out_channels).detach().to(device),
-            vmem = torch.zeros(batch_size, self.out_channels).detach().to(device),
-            eps0 = torch.zeros(batch_size, self.in_channels ).detach().to(device),
-            eps1 = torch.zeros(batch_size, self.in_channels ).detach().to(device)
+            isyn = torch.zeros(batch_size, self.out_channels).detach().to(device) + init_value,
+            vmem = torch.zeros(batch_size, self.out_channels).detach().to(device) + init_value,
+            eps0 = torch.zeros(batch_size, self.in_channels ).detach().to(device) + init_value,
+            eps1 = torch.zeros(batch_size, self.in_channels ).detach().to(device) + init_value
             )
         return self
 
@@ -94,7 +94,7 @@ class CLLDenseModule(nn.Module):
         eps0 = input + self.alphas*self.state.eps0
         eps1 = self.alpha*self.state.eps1 + eps0
         eps1 = eps1.detach()
-        pv = F.linear(eps1, self.weight, self.bias)
+        pv = torch.sigmoid(F.linear(eps1, self.weight, self.bias))
         output = (vmem > 0).float()
         # update the neuronal state
         self.state = NeuronState(isyn=isyn.detach(),
@@ -107,38 +107,39 @@ class CLLDenseModule(nn.Module):
         return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, output_size=None):
+    def __init__(self, in_channels, out_channels, target_size=None, alpha=.9, alphas = .85):
         super(DenseDCLLlayer, self).__init__()
-        if output_size is None:
-            output_size = out_channels
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.output_size = output_size
-        self.i2h = CLLDenseModule(in_channels,out_channels)
-        self.i2o = nn.Linear(out_channels, output_size)
+        self.target_size = target_size
+        self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas)
+        self.i2o = nn.Linear(out_channels, target_size)
         self.i2o.weight.requires_grad = False
         self.i2o.bias.requires_grad = False
         # self.softmax = nn.LogSoftmax(dim=1)
+        self.input_size = self.out_channels
         self.init_dcll()
 
+    def get_flat_size(self):
+        return self.out_channels
+
     def forward(self, input):
-        input     = input.detach()
+        input     = input.view(-1,self.in_channels).detach()
         output, pv = self.i2h(input)
-        pvoutput = torch.sigmoid(self.i2o(pv))
-        # pvoutput = self.softmax(self.i2o(flatten))
+        pvoutput = self.i2o(pv)
         return output, pvoutput
 
-    def init_hiddens(self, batch_size):
-        self.i2h.init_state(batch_size)
+    def init_hiddens(self, batch_size, init_value = 0):
+        self.i2h.init_state(batch_size, init_value = init_value)
         return self
 
     def init_dcll(self):
-        limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.output_size))
-        self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.output_size])).float()
+        limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.target_size))
+        self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
+        limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
-        self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
+        self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
 
 
@@ -171,6 +172,9 @@ class CLLConv2DModule(nn.Module):
         self.alpha = alpha
         self.alphas = alphas
 
+
+
+
     def reset_parameters(self):
         import math
         n = self.in_channels
@@ -181,15 +185,15 @@ class CLLConv2DModule(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def init_state(self, batch_size, im_width, im_height):
+    def init_state(self, batch_size, im_width, im_height, init_value = 0):
         dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
         isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
 
         self.state = NeuronState(
-            isyn = torch.zeros(isyn_shape).detach().to(device),
-            vmem = torch.zeros(isyn_shape).detach().to(device),
-            eps0 = torch.zeros(dummy_input.shape).detach().to(device),
-            eps1 = torch.zeros(dummy_input.shape).detach().to(device)
+            isyn = torch.zeros(isyn_shape).detach().to(device)+init_value,
+            vmem = torch.zeros(isyn_shape).detach().to(device)+init_value,
+            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value
             )
         return self
 
@@ -221,7 +225,7 @@ class CLLConv2DModule(nn.Module):
 
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, output_size=10, pooling=1, padding = 2, alpha=.95, alphas=.9):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=1, padding = 2, alpha=.95, alphas=.9):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
@@ -234,40 +238,43 @@ class Conv2dDCLLlayer(nn.Module):
             self.pooling = pooling
             self.pool = lambda x: x
         self.kernel_size = kernel_size
-        self.output_size = output_size
+        self.target_size = target_size
         self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//pooling**2, output_size, bias=False)
+        self.i2o = nn.Linear(im_height*im_width*out_channels//pooling**2, target_size, bias=False)
         self.i2o.weight.requires_grad = False
         #self.i2o.bias.requires_grad = False
         #self.softmax = nn.LogSoftmax(dim=1)
         self.init_dcll()
 
+    def get_flat_size(self):
+        return int(self.im_height*self.im_width*self.out_channels//self.pooling**2)
+
     def forward(self, input):
         input     = input.detach()
         output, pv = self.i2h(input)      
         pvp = self.pool(pv)
-        flatten = pvp.view(-1,self.im_height*self.im_width*self.out_channels//self.pooling**2)
-        pvoutput = torch.sigmoid(self.i2o(flatten))
+        flatten = pvp.view(-1,self.get_flat_size())
+        pvoutput = self.i2o(flatten)
         output = output.detach()
-        return self.pool(output), pvoutput
+        return self.pool(output), pvoutput, pv
 
-    def init_hiddens(self, batch_size):
-        self.i2h.init_state(batch_size, self.im_height, self.im_width)
+    def init_hiddens(self, batch_size, init_value):
+        self.i2h.init_state(batch_size, self.im_height, self.im_width, init_value = init_value)
         return self
 
     def init_dcll(self):
-        nh = int(self.im_height*self.im_width*self.out_channels//self.pooling**2)
-        limit = np.sqrt(6.0 / (nh + self.output_size))
-        self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.output_size])).float()
+        nh = self.get_flat_size()
+        limit = np.sqrt(6.0 / (nh + self.target_size))
+        self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        limit = 1e-32
+        limit = .1
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
 
-class DCLLslice(nn.Module):
+class DCLLBase(nn.Module):
     def __init__(self, dclllayer, batch_size=48, loss = torch.nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200):
-        super(DCLLslice, self).__init__()
+        super(DCLLBase, self).__init__()
         self.dclllayer = dclllayer
         self.crit = loss().to(device)
         self.optimizer = optimizer(dclllayer.i2h.parameters(), **kwargs_optimizer)
@@ -275,30 +282,50 @@ class DCLLslice(nn.Module):
         self.batch_size = batch_size
         self.init(self.batch_size)
 
-    def init(self, batch_size):
+    def init(self, batch_size, init_states = True):
         self.clout = []
-        self.dclllayer.init_hiddens(batch_size)
         self.iter = 0 
+        if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
 
     def forward(self, input):
         self.iter+=1
-        o, p = self.dclllayer.forward(input)
-        self.clout.append(p.argmax(1).detach().cpu().numpy())
-        return o,p
+        o, p, pv = self.dclllayer.forward(input)
+        return o, p, pv
 
     def train(self, input, target):
-        output, pvoutput = self.forward(input)
+        output, pvoutput, pv = self.forward(input)
         if self.iter>=self.burnin:
             self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
-            self.crit(pvoutput, target).backward()
+            loss = self.crit(pvoutput, target) + 1e-6*torch.norm(pv,2)
+            loss.backward()
             self.optimizer.step()
-        return output, pvoutput
+        return output, pvoutput, pv
+
+class DCLLClassification(DCLLBase):
+    def forward(self, input):
+        o, p, pv = super(DCLLClassification, self).forward(input)        
+        self.clout.append(p.argmax(1).detach().cpu().numpy())
+        return o,p,pv
 
     def accuracy(self, targets):
         cl = np.array(self.clout)
         begin = cl.shape[0]
         return accuracy_by_vote(cl, targets[-begin:])
+
+class DCLLGeneration(DCLLBase):
+    def init(self, batch_size, init_states = True):
+        self.vmem_out = []
+        self.spikes_out = []
+        self.clout = []
+        self.iter = 0 
+        if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
+    def forward(self, input):
+        o, p, pv = super(DCLLGeneration, self).forward(input)        
+        self.clout.append(p.detach().cpu().numpy())
+        self.spikes_out.append(o.detach().cpu().numpy())
+        self.vmem_out.append(self.dclllayer.i2h.state[1].detach().cpu().numpy())
+        return o,p, pv
 
 
 

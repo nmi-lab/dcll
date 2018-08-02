@@ -28,11 +28,11 @@ if __name__ == '__main__':
     im_width = 28
     im_height = 28
     batch_size = 64
-    output_size = 10
+    target_size = 10
 
-    layer1 = Conv2dDCLLlayer(in_channels,    out_channels = out_channels_1, im_width=im_width  , im_height=im_height  , output_size=output_size, pooling=2, padding=3, kernel_size=7).to(device)
-    layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2, im_width=im_width/2, im_height=im_height/2, output_size=output_size, pooling=2, padding=3, kernel_size=7).to(device)
-    layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3, im_width=im_width/4, im_height=im_height/4, output_size=output_size, pooling=1, padding=3, kernel_size=7).to(device)
+    layer1 = Conv2dDCLLlayer(in_channels,    out_channels = out_channels_1, im_width=im_width  , im_height=im_height  , target_size=target_size, pooling=2, padding=3, kernel_size=7).to(device)
+    layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2, im_width=im_width/2, im_height=im_height/2, target_size=target_size, pooling=2, padding=3, kernel_size=7).to(device)
+    layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3, im_width=im_width/4, im_height=im_height/4, target_size=target_size, pooling=1, padding=3, kernel_size=7).to(device)
 
     criterion = nn.MSELoss().to(device)
     optimizer = optim.SGD([layer1.i2h.weight, layer2.i2h.weight, layer3.i2h.weight] + [layer1.i2h.bias, layer2.i2h.bias, layer3.i2h.bias], lr=5e-5)
