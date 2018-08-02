@@ -37,13 +37,8 @@ class ConvNetwork(torch.nn.Module):
 
     def forward(self, x):
         output1, pvoutput1, _ = self.layer1.forward(x)
-        pvoutput1 = torch.sigmoid(pvoutput1)
-
         output2, pvoutput2, _ = self.layer2.forward(output1)
-        pvoutput2 = torch.sigmoid(pvoutput2)
-
         output3, pvoutput3, _ = self.layer3.forward(output2)
-        pvoutput3 = torch.sigmoid(pvoutput3)
 
         return [(output1, output2, output3),
                 (pvoutput1, pvoutput2, pvoutput3)]

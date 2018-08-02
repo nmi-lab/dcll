@@ -94,13 +94,14 @@ class CLLDenseModule(nn.Module):
         eps0 = input + self.alphas*self.state.eps0
         eps1 = self.alpha*self.state.eps1 + eps0
         eps1 = eps1.detach()
-        pv = torch.sigmoid(F.linear(eps1, self.weight, self.bias))
+        pv = F.linear(eps1, self.weight, self.bias)
         output = (vmem > 0).float()
         # update the neuronal state
         self.state = NeuronState(isyn=isyn.detach(),
                                  vmem=vmem.detach(),
                                  eps0=eps0.detach(),
                                  eps1=eps1.detach())
+
         return output, pv
 
     def init_prev(self, batch_size, im_width, im_height):
@@ -113,9 +114,9 @@ class DenseDCLLlayer(nn.Module):
         self.out_channels = out_channels
         self.target_size = target_size
         self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas)
-        self.i2o = nn.Linear(out_channels, target_size)
+        self.i2o = nn.Linear(out_channels, target_size, bias=False)
         self.i2o.weight.requires_grad = False
-        self.i2o.bias.requires_grad = False
+        # self.i2o.bias.requires_grad = False
         # self.softmax = nn.LogSoftmax(dim=1)
         self.input_size = self.out_channels
         self.init_dcll()
@@ -138,7 +139,8 @@ class DenseDCLLlayer(nn.Module):
         limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
+        # limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
+        limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
         self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
@@ -172,8 +174,6 @@ class CLLConv2DModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
-
-
 
 
     def reset_parameters(self):
@@ -268,7 +268,8 @@ class Conv2dDCLLlayer(nn.Module):
         limit = np.sqrt(6.0 / (nh + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        limit = .1
+        limit = 1e-32
+        # limit = .1
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
