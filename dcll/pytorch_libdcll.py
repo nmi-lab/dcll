@@ -12,13 +12,18 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from torch import autograd
 from torch.nn import functional as F
 import numpy as np
 from collections import namedtuple
 import logging
 from collections import Counter
+
+# if gpu is to be used
+device = 'cuda:1'
+
+NeuronState = namedtuple(
+    'NeuronState', ['isyn', 'vmem', 'eps0', 'eps1'])
 
 def adjust_learning_rate(optimizer, epoch, base_lr = 5e-5):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -41,20 +46,14 @@ def accuracy_by_mean(pvoutput, labels):
     return float(np.mean((np.array(pvoutput) == labels.argmax(2).cpu().numpy())))
 
 
-# if gpu is to be used
-device = 'cuda'
-
-NeuronState = namedtuple(
-    'NeuronState', ('isyn', 'vmem', 'eps0', 'eps1'))
-
 class CLLDenseModule(nn.Module):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .9, alphas=.85):
         super(CLLDenseModule, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels))
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels))
         if bias:
-            self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
@@ -76,7 +75,8 @@ class CLLDenseModule(nn.Module):
             eps0 = torch.zeros(batch_size, self.in_channels ).detach().to(device) + init_value,
             eps1 = torch.zeros(batch_size, self.in_channels ).detach().to(device) + init_value
             )
-        return self
+        return self.state
+#         return self
 
     def forward(self, input):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
@@ -107,6 +107,8 @@ class CLLDenseModule(nn.Module):
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, alpha=.9, alphas = .85):
+        if (target_size is None):
+            target_size = out_channels
         super(DenseDCLLlayer, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -123,15 +125,15 @@ class DenseDCLLlayer(nn.Module):
         return self.out_channels
 
     def forward(self, input):
-        input     = input.view(-1,self.in_channels).detach()
+        input = input[0].view(-1,self.in_channels).detach()
         output, pv = self.i2h(input)
         pvoutput = self.i2o(pv)
         output = output.detach()
         return output, pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
-        self.i2h.init_state(batch_size, init_value = init_value)
-        return self
+        return self.i2h.init_state(batch_size, init_value = init_value)
+#         return self
 
     def init_dcll(self):
         limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.target_size))
@@ -141,8 +143,6 @@ class DenseDCLLlayer(nn.Module):
         # limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
         self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
-
-
 
 
 class CLLConv2DModule(nn.Module):
@@ -164,9 +164,9 @@ class CLLConv2DModule(nn.Module):
         self.dilation = dilation
         self.groups = groups
 
-        self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
         if bias:
-            self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
@@ -258,8 +258,8 @@ class Conv2dDCLLlayer(nn.Module):
         return self.pool(output), pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
-        self.i2h.init_state(batch_size, self.im_height, self.im_width, init_value = init_value)
-        return self
+        return self.i2h.init_state(batch_size, self.im_height, self.im_width, init_value = init_value)
+        #return self
 
     def init_dcll(self):
         nh = self.get_flat_size()
@@ -272,7 +272,7 @@ class Conv2dDCLLlayer(nn.Module):
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
 class DCLLBase(nn.Module):
-    def __init__(self, dclllayer, batch_size=48, loss = torch.nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200):
+    def __init__(self, dclllayer, batch_size=48, loss = nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200):
         super(DCLLBase, self).__init__()
         self.dclllayer = dclllayer
         self.crit = loss().to(device)
@@ -330,4 +330,5 @@ class DCLLGeneration(DCLLBase):
 
 if __name__ == '__main__':
     #Test dense gradient
-    f = CLLDenseFunction.apply
+#    f = CLLDenseFunction.apply
+    pass

@@ -69,3 +69,6 @@ target/
 dcll.egg-info/
 *.pyc
 runs/
+
+.project
+.pydevproject
