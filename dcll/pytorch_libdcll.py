@@ -26,7 +26,6 @@ def adjust_learning_rate(optimizer, epoch, base_lr = 5e-5):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-
 def accuracy_by_vote(pvoutput, labels):
     pvoutput_ = np.array(pvoutput).T
     n = len(pvoutput_)
@@ -40,7 +39,6 @@ def accuracy_by_vote(pvoutput, labels):
 
 def accuracy_by_mean(pvoutput, labels):
     return float(np.mean((np.array(pvoutput) == labels.argmax(2).cpu().numpy())))
-
 
 
 # if gpu is to be used
@@ -94,7 +92,7 @@ class CLLDenseModule(nn.Module):
         eps0 = input + self.alphas*self.state.eps0
         eps1 = self.alpha*self.state.eps1 + eps0
         eps1 = eps1.detach()
-        pv = F.linear(eps1, self.weight, self.bias)
+        pv = torch.sigmoid(F.linear(eps1, self.weight, self.bias))
         output = (vmem > 0).float()
         # update the neuronal state
         self.state = NeuronState(isyn=isyn.detach(),
@@ -129,7 +127,7 @@ class DenseDCLLlayer(nn.Module):
         output, pv = self.i2h(input)
         pvoutput = self.i2o(pv)
         output = output.detach()
-        return output, pvoutput
+        return output, pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, init_value = init_value)
@@ -139,8 +137,8 @@ class DenseDCLLlayer(nn.Module):
         limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        # limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
-        limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
+        limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
+        # limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
         self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
