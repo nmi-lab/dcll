@@ -234,9 +234,6 @@ class Conv2dDCLLlayer(nn.Module):
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
           
 
-                                   
-
-
 if __name__ == '__main__':
     #Test dense gradient
     f = CLLDenseFunction.apply
