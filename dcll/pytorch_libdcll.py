@@ -26,7 +26,6 @@ def adjust_learning_rate(optimizer, epoch, base_lr = 5e-5):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-
 def accuracy_by_vote(pvoutput, labels):
     pvoutput_ = np.array(pvoutput).T
     n = len(pvoutput_)
@@ -40,7 +39,6 @@ def accuracy_by_vote(pvoutput, labels):
 
 def accuracy_by_mean(pvoutput, labels):
     return float(np.mean((np.array(pvoutput) == labels.argmax(2).cpu().numpy())))
-
 
 
 # if gpu is to be used
@@ -101,6 +99,7 @@ class CLLDenseModule(nn.Module):
                                  vmem=vmem.detach(),
                                  eps0=eps0.detach(),
                                  eps1=eps1.detach())
+
         return output, pv
 
     #def init_prev(self, batch_size, im_width, im_height):
@@ -113,9 +112,9 @@ class DenseDCLLlayer(nn.Module):
         self.out_channels = out_channels
         self.target_size = target_size
         self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas)
-        self.i2o = nn.Linear(out_channels, target_size)
+        self.i2o = nn.Linear(out_channels, target_size, bias=False)
         self.i2o.weight.requires_grad = False
-        self.i2o.bias.requires_grad = False
+        # self.i2o.bias.requires_grad = False
         # self.softmax = nn.LogSoftmax(dim=1)
         self.input_size = self.out_channels
         self.init_dcll()
@@ -127,7 +126,8 @@ class DenseDCLLlayer(nn.Module):
         input     = input.view(-1,self.in_channels).detach()
         output, pv = self.i2h(input)
         pvoutput = self.i2o(pv)
-        return output, pvoutput
+        output = output.detach()
+        return output, pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, init_value = init_value)
@@ -138,6 +138,7 @@ class DenseDCLLlayer(nn.Module):
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
         limit = np.sqrt(1. / (np.prod(self.out_channels) + self.in_channels))
+        # limit = np.sqrt(1e-32 / (np.prod(self.out_channels) + self.in_channels))
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.in_channels, self.out_channels])).t().float()
         self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
@@ -171,8 +172,6 @@ class CLLConv2DModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
-
-
 
 
     def reset_parameters(self):
@@ -251,14 +250,14 @@ class Conv2dDCLLlayer(nn.Module):
 
     def forward(self, input):
         input     = input.detach()
-        output, pv = self.i2h(input)      
+        output, pv = self.i2h(input)
         pvp = self.pool(pv)
-        flatten = pvp.view(-1,self.get_flat_size())
+        flatten = pvp.view(-1, self.get_flat_size())
         pvoutput = self.i2o(flatten)
         output = output.detach()
         return self.pool(output), pvoutput, pv
 
-    def init_hiddens(self, batch_size, init_value):
+    def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, self.im_height, self.im_width, init_value = init_value)
         return self
 
@@ -267,10 +266,10 @@ class Conv2dDCLLlayer(nn.Module):
         limit = np.sqrt(6.0 / (nh + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
-        limit = .1
+        limit = 1e-32
+        # limit = .1
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
-
 
 class DCLLBase(nn.Module):
     def __init__(self, dclllayer, batch_size=48, loss = torch.nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200):
@@ -284,7 +283,7 @@ class DCLLBase(nn.Module):
 
     def init(self, batch_size, init_states = True):
         self.clout = []
-        self.iter = 0 
+        self.iter = 0
         if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
 
     def forward(self, input):
@@ -304,7 +303,7 @@ class DCLLBase(nn.Module):
 
 class DCLLClassification(DCLLBase):
     def forward(self, input):
-        o, p, pv = super(DCLLClassification, self).forward(input)        
+        o, p, pv = super(DCLLClassification, self).forward(input)
         self.clout.append(p.argmax(1).detach().cpu().numpy())
         return o,p,pv
 
@@ -318,10 +317,10 @@ class DCLLGeneration(DCLLBase):
         self.vmem_out = []
         self.spikes_out = []
         self.clout = []
-        self.iter = 0 
+        self.iter = 0
         if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
     def forward(self, input):
-        o, p, pv = super(DCLLGeneration, self).forward(input)        
+        o, p, pv = super(DCLLGeneration, self).forward(input)
         self.clout.append(p.detach().cpu().numpy())
         self.spikes_out.append(o.detach().cpu().numpy())
         self.vmem_out.append(self.dclllayer.i2h.state[1].detach().cpu().numpy())
