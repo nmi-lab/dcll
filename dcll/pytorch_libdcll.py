@@ -59,6 +59,9 @@ class CLLDenseModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
+        # self.alpha = torch.nn.Parameter(torch.Tensor([alpha]))
+        # self.alphas = torch.nn.Parameter(torch.Tensor([alphas]))
+        # self.alphas = torch.nn.Parameter(torch.ones(self.out_channels) * alphas)
 
     def reset_parameters(self):
         import math
@@ -86,12 +89,15 @@ class CLLDenseModule(nn.Module):
                             .format(self.state.isyn.shape[0], input.shape[0]))
             self.init_state(input.shape[0])
 
+        # clamp alphas to [0,1] range
+        # self.alpha.data = self.alpha.clamp(0., 1.)
+        # self.alphas.data = self.alphas.clamp(0., 1.)
+
         isyn = F.linear(input, self.weight, self.bias)
         isyn += self.alphas*self.state.isyn
         vmem = self.alpha*self.state.vmem + isyn
         eps0 = input + self.alphas*self.state.eps0
         eps1 = self.alpha*self.state.eps1 + eps0
-        eps1 = eps1.detach()
         pv = torch.sigmoid(F.linear(eps1, self.weight, self.bias))
         output = (vmem > 0).float()
         # update the neuronal state
