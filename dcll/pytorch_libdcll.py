@@ -102,8 +102,8 @@ class CLLDenseModule(nn.Module):
 
         return output, pv
 
-    def init_prev(self, batch_size, im_width, im_height):
-        return torch.zeros(batch_size, self.out_channels)
+    #def init_prev(self, batch_size, im_width, im_height):
+    #    return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, alpha=.9, alphas = .85):
@@ -224,22 +224,27 @@ class CLLConv2DModule(nn.Module):
 
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=1, padding = 2, alpha=.95, alphas=.9):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
         self.in_channels = in_channels
         self.out_channels = out_channels
-        if pooling>1:
-            self.pooling = pooling
-            self.pool = nn.MaxPool2d(kernel_size=pooling, stride=pooling, padding=0)
+        if pooling is not None:
+            if not hasattr(pooling, '__len__'): 
+                pooling = (pooling, pooling)
+
+            pool_pad = (pooling[1]-1)//2
+            self.pooling = pooling[0]
+            print(pooling[0], pooling[1], pool_pad)
+            self.pool = nn.AvgPool2d(kernel_size=pooling[0], stride=pooling[1], padding = pool_pad)
         else:
-            self.pooling = pooling
+            self.pooling = 1
             self.pool = lambda x: x
         self.kernel_size = kernel_size
         self.target_size = target_size
         self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//pooling**2, target_size, bias=False)
+        self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
         self.i2o.weight.requires_grad = False
         #self.i2o.bias.requires_grad = False
         #self.softmax = nn.LogSoftmax(dim=1)
@@ -272,31 +277,47 @@ class Conv2dDCLLlayer(nn.Module):
         self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
 
 class DCLLBase(nn.Module):
+<<<<<<< HEAD
     def __init__(self, dclllayer, batch_size=48, loss = nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200):
+=======
+    def __init__(self, dclllayer, name='DCLLbase', batch_size=48, loss = torch.nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200, collect_stats = False):
+>>>>>>> upstream/master
         super(DCLLBase, self).__init__()
         self.dclllayer = dclllayer
         self.crit = loss().to(device)
         self.optimizer = optimizer(dclllayer.i2h.parameters(), **kwargs_optimizer)
         self.burnin = burnin
         self.batch_size = batch_size
+        self.collect_stats = collect_stats
         self.init(self.batch_size)
+        self.name = name
 
     def init(self, batch_size, init_states = True):
         self.clout = []
+        self.mean_activity = []
         self.iter = 0
         if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
 
     def forward(self, input):
         self.iter+=1
         o, p, pv = self.dclllayer.forward(input)
+        self.mean_activity.append(o.detach().cpu().numpy().mean())        
         return o, p, pv
+
+    def write_stats(self, writer, label, epoch):
+        '''
+        *writer*: a tensorboard writer
+        *label*: label, to append the tensorboard entry
+        '''
+        if self.collect_stats:
+            writer.add_scalar(self.name+'/'+'/meanpv/'+label, np.mean(self.mean_activity), epoch)
 
     def train(self, input, target):
         output, pvoutput, pv = self.forward(input)
         if self.iter>=self.burnin:
-            self.optimizer.zero_grad()
+            #self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
-            loss = self.crit(pvoutput, target) + 1e-6*torch.norm(pv,2)
+            loss = self.crit(pvoutput, target) #+ 1e-3*(torch.norm(pv-.5,2))
             loss.backward()
             self.optimizer.step()
         return output, pvoutput, pv
@@ -307,18 +328,25 @@ class DCLLClassification(DCLLBase):
         self.clout.append(p.argmax(1).detach().cpu().numpy())
         return o,p,pv
 
+    def write_stats(self, writer, label, epoch):
+        super(DCLLClassification, self).write_stats(writer, label, epoch)
+        writer.add_scalar(self.name+'/acc/'+label, self.acc, epoch)
+
     def accuracy(self, targets):
         cl = np.array(self.clout)
         begin = cl.shape[0]
-        return accuracy_by_vote(cl, targets[-begin:])
+        self.acc = accuracy_by_vote(cl, targets[-begin:])
+        return self.acc
 
 class DCLLGeneration(DCLLBase):
+
     def init(self, batch_size, init_states = True):
         self.vmem_out = []
         self.spikes_out = []
         self.clout = []
         self.iter = 0
         if init_states: self.dclllayer.init_hiddens(batch_size, init_value = 0)
+
     def forward(self, input):
         o, p, pv = super(DCLLGeneration, self).forward(input)
         self.clout.append(p.detach().cpu().numpy())

@@ -38,7 +38,7 @@ class SequenceGenerator(object):
 
         self.ds = ds
         self.size = size
-        f = h5py.File(filename, 'r')
+        f = h5py.File(filename, 'r', swmr=True, libver="latest")
         self.grp1 = f[group]
         self.num_classes = 11
         self.batch_size = batch_size
@@ -60,11 +60,11 @@ class SequenceGenerator(object):
 #def find_first(a, i):
 #    return np.searchsorted(a,i)
 
-def find_first(a, tgt):
-    for i,aa in enumerate(a):
-        if aa>tgt:
-            return i
-    return len(a)
+#def find_first(a, tgt):
+#    for i,aa in enumerate(a):
+#        if aa>tgt:
+#            return i
+#    return len(a)
 
 
     
@@ -143,28 +143,30 @@ def aedat_to_events(filename):
 #    return sorted_events
 
 def next(hdf5_group, batch_size = 32, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64]):
-    batch = [None for i in range(batch_size)]
+    batch = np.empty([batch_size,T]+size, dtype='float')
     batch_idx = np.random.randint(0,len(hdf5_group), size=batch_size)
     batch_idx_l = np.random.randint(0, n_classes, size=batch_size)
     for i, b in (enumerate(batch_idx)):
-        start_time =  get_time_slice(hdf5_group[str(b)]['labels'].value, batch_idx_l[i], T)
-        batch[i] = get_event_slice(hdf5_group[str(b)]['data'].value, start_time, T, ds=ds, size=size)
-    return np.array(batch, dtype='float'), expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
+        dset = hdf5_group[str(b)]
+        start_time =  get_time_slice(dset['labels'].value, batch_idx_l[i], T)
+        batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size)
+    return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
 
 def get_time_slice(labels, label, T):
     start_time = labels[label][1]
-    start_time = np.random.randint(start_time,labels[label][2]-T*1e3)
+    start_time = np.random.randint(start_time,labels[label][2]-2*T*1e3)
     return start_time
 
-def get_event_slice(events, start_time, T, size = [128,128], ds = 1):
-    idx = np.searchsorted(events[:,0], start_time)
-    return chunk_evs_pol(events[idx:], deltat=1000, chunk_size=T, size = size, ds = ds)
+def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1):
+    idx_beg = find_first(times, start_time)
+    idx_end = find_first(times[idx_beg:], start_time+T*1000)+idx_beg
+    return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=1000, chunk_size=T, size = size, ds = ds)
 
 def create_events_hdf5():
     fns_train = gather_aedat('/share/data/DvsGesture/aedat/',1,24)
-    fns_test = gather_aedat('/share/data/DvsGesture/aedat/',24,30)
+    fns_test = gather_aedat('/share/data/DvsGesture/aedat/',25,30)
 
-    with h5py.File('/share/data/DvsGesture/dvs_gestures_events.hdf5', 'w') as f:
+    with h5py.File('/home/eneftci/dvs_gestures_events.hdf5', 'w') as f:
         f.clear()
 
         print("processing training data...")
@@ -174,8 +176,10 @@ def create_events_hdf5():
             print(key)
             events, labels = aedat_to_events(file_d)
             subgrp = grp.create_group(str(key))
-            dset_d = subgrp.create_dataset('data', events.shape, dtype=np.uint32)
-            dset_d[...] = events
+            dset_dt = subgrp.create_dataset('time', events[:,0].shape, dtype=np.uint32)
+            dset_da = subgrp.create_dataset('data', events[:,1:].shape, dtype=np.uint8)
+            dset_dt[...] = events[:,0]
+            dset_da[...] = events[:,1:]
             dset_l = subgrp.create_dataset('labels', labels.shape, dtype=np.uint32)
             dset_l[...] = labels
             key += 1
@@ -187,8 +191,10 @@ def create_events_hdf5():
             print(key)
             events, labels = aedat_to_events(file_d)
             subgrp = grp.create_group(str(key))
-            dset_d = subgrp.create_dataset('data', events.shape, dtype=np.uint32)
-            dset_d[...] = events
+            dset_dt = subgrp.create_dataset('time', events[:,0].shape, dtype=np.uint32)
+            dset_da = subgrp.create_dataset('data', events[:,1:].shape, dtype=np.uint8)
+            dset_dt[...] = events[:,0]
+            dset_da[...] = events[:,1:]
             dset_l = subgrp.create_dataset('labels', labels.shape, dtype=np.uint32)
             dset_l[...] = labels
             key += 1
@@ -198,20 +204,20 @@ def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4):
     stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds)
     return strain, stest
 
-def plot_gestures_imshow(images, labels, nim=11):
+def plot_gestures_imshow(images, labels, nim=11, avg=50):
     import pylab as plt
     plt.figure(figsize = [nim+2,6])
     import matplotlib.gridspec as gridspec
-    gs = gridspec.GridSpec(6, nim)
+    gs = gridspec.GridSpec(images.shape[1]//avg, nim)
     plt.subplots_adjust(left=0, bottom=0, right=1, top=0.95, wspace=.0, hspace=.04)
     categories = labels.argmax(axis=1)
     idx = 0
     for j in range(nim):
          #idx = np.where(categories==j)[0][0]
          idx += 1 
-         for i in range(6):
+         for i in range(images.shape[1]//avg):
              ax = plt.subplot(gs[i, j])
-             plt.imshow(images[idx,i*50:(i*50+50),0,:,:].sum(axis=0).T)
+             plt.imshow(images[idx,i*avg:(i*avg+avg),0,:,:].sum(axis=0).T)
              plt.xticks([])
              if i==0:  plt.title(mapping[labels[0,idx].argmax()], fontsize=10)
              plt.yticks([])
@@ -219,8 +225,7 @@ def plot_gestures_imshow(images, labels, nim=11):
     return images,labels
 
 
-if __name__ == "__main__":
-    gen_train, gen_test = create_data(size=[2,128,128],ds=1)
+
     #pass
 
 

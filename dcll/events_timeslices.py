@@ -19,14 +19,18 @@ def one_hot(mbt, num_classes):
     out[np.arange(mbt.shape[0], dtype='int'),mbt.astype('int')] = 1
     return out
 
+#def find_first(a, tgt):
+#    previ = 0
+#    for i,aa in enumerate(a):
+#        if aa>tgt:
+#            return previ
+#        else:
+#            previ = i
+#    return len(a)
+import bisect
 def find_first(a, tgt):
-    previ = 0
-    for i,aa in enumerate(a):
-        if aa>tgt:
-            return previ
-        else:
-            previ = i
-    return len(a)
+    return bisect.bisect_left(a, tgt)
+
 
 def cast_evs(evs):
     ts = (evs[:,0]*1e6).astype('uint64')
@@ -75,17 +79,17 @@ def chunk_evs(evs, deltat=1000, chunk_size=500, size = [304,240], ds = 1):
         idx_start = idx_end
     return chunks
 
-def chunk_evs_pol(evs, deltat=1000, chunk_size=500, size = [2,304,240], ds = 1):
-    t_start = evs[0,0]
+def chunk_evs_pol(times, addrs, deltat=1000, chunk_size=500, size = [2,304,240], ds = 1):
+    t_start = times[0]
     ts = range(t_start, t_start + chunk_size*deltat, deltat)
     chunks = np.zeros([len(ts)]+size, dtype='int8')
     idx_start=0
     idx_end=0
     for i,t in enumerate(ts):
-        idx_end += find_first(evs[idx_end:,0], t)
+        idx_end += find_first(times[idx_end:], t)
         if idx_end>idx_start:
-            ee = evs[idx_start:idx_end]
-            chunks[i,ee[:,3],ee[:,1]//ds,ee[:,2]//ds] = 1
+            ee = addrs[idx_start:idx_end]
+            chunks[i,ee[:,2],ee[:,0]//ds,ee[:,1]//ds] = 1
         idx_start = idx_end
     return chunks
 
