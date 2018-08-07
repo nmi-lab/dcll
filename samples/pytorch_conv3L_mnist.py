@@ -47,6 +47,9 @@ if __name__ == '__main__':
     from tensorboardX import SummaryWriter
     writer = SummaryWriter(comment='MNIST Conv')
 
+    torch.manual_seed(0)
+    np.random.seed(0)
+
     n_epochs=200
     n_iters = 500
     in_channels = 1
@@ -112,12 +115,12 @@ if __name__ == '__main__':
         #print("Step time: {0}".format(time.time()-t0))
         print('TRAIN Epoch {0}: Acc1 {1:1.3} Acc2 {2:1.3} Acc3 {3:1.3}'.format(epoch, acc(pvs[0],labels1h[-1]), acc(pvs[1], labels1h[-1]), acc(pvs[2], labels1h[-1])))
 
-        # input, labels1h = image2spiketrain(*gen_test.next())
-        # input = torch.Tensor(input).to(device).reshape(n_iters,
-        #                                                batch_size,
-        #                                                in_channels,
-        #                                                im_width,im_height)
-        # labels1h = torch.Tensor(labels1h).to(device)
+        input, labels1h = image2spiketrain(*gen_test.next())
+        input = torch.Tensor(input).to(device).reshape(n_iters,
+                                                       batch_size,
+                                                       in_channels,
+                                                       im_width,im_height)
+        labels1h = torch.Tensor(labels1h).to(device)
 
         for iter in range(n_iters-100):
             spikes, pvs = net.forward(input[iter])
