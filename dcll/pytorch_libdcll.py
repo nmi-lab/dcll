@@ -140,6 +140,13 @@ class DenseDCLLlayer(nn.Module):
         self.i2h.init_state(batch_size, init_value = init_value)
         return self
 
+    def reset_tracks(self, mask = None):
+        if mask is None:
+            self.init_hiddens(self.i2h.state.isyn.shape[0])
+            return
+        for field in self.i2h.state:
+            field[mask] = 0.
+
     def init_dcll(self):
         limit = np.sqrt(6.0 / (np.prod(self.out_channels) + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.target_size])).float()
