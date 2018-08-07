@@ -46,6 +46,9 @@ def accuracy_by_mean(pvoutput, labels):
 NeuronState = namedtuple(
     'NeuronState', ('isyn', 'vmem', 'eps0', 'eps1'))
 
+reducedNeuronState = namedtuple(
+    'NeuronState', ('eps0', 'eps1', 'arp'))
+
 class CLLDenseModule(nn.Module):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .9, alphas=.85):
         super(CLLDenseModule, self).__init__()
@@ -105,15 +108,15 @@ class CLLDenseModule(nn.Module):
     #    return torch.zeros(batch_size, self.out_channels)
 
 class DenseDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, target_size=None, alpha=.9, alphas = .85):
+    def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85):
         super(DenseDCLLlayer, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.target_size = target_size
-        self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas)
-        self.i2o = nn.Linear(out_channels, target_size, bias=False)
+        self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas, bias = bias)
+        self.i2o = nn.Linear(out_channels, target_size, bias=True)
         self.i2o.weight.requires_grad = False
-        # self.i2o.bias.requires_grad = False
+        self.i2o.bias.requires_grad = False
         # self.softmax = nn.LogSoftmax(dim=1)
         self.input_size = self.out_channels
         self.init_dcll()
@@ -142,8 +145,6 @@ class DenseDCLLlayer(nn.Module):
         self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
 
-
-
 class CLLConv2DModule(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9):
         super(CLLConv2DModule, self).__init__()
@@ -162,10 +163,11 @@ class CLLConv2DModule(nn.Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
+        self.act = nn.Sigmoid()
 
-        self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
+        self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
         if bias:
-            self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
@@ -222,8 +224,56 @@ class CLLConv2DModule(nn.Module):
         return torch.zeros(batch_size, self.in_channels, im_width, im_height)
 
 
+
+class CLLConv2DRRPModule(CLLConv2DModule):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100):
+        '''
+        Continuous local learning with relative refractory period. No isyn or vmem dynamics for speed and memory.
+        *wrp*: weight for the relative refractory period
+        '''
+        super(CLLConv2DRRPModule, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, alpha, alphas)
+
+        ##best 
+        #self.tarp=10
+        self.wrp=wrp
+        self.alpharp=alpharp
+
+    def init_state(self, batch_size, im_width, im_height, init_value = 0):
+        dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
+        isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+
+        self.state = reducedNeuronState(
+            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
+            arp = torch.zeros(isyn_shape).detach().to(device)+init_value
+            )
+        return self
+
+    def forward(self, input):
+        # input: input tensor of shape (minibatch x in_channels x iH x iW)
+        # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
+        if not (input.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
+            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+                            .format(self.state.eps0.shape[0], input.shape[0]))
+            self.init_state(input.shape[0], input.shape[2], input.shape[3])
+
+        eps0 = input + self.alphas * self.state.eps0
+        eps1 = self.alpha * self.state.eps1 + self.state.eps0
+        pvmem = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups) - self.state.arp
+        pv = self.act(pvmem)
+        output = (pvmem>0).float()
+        ##best
+        #arp = .65*self.state.arp + output*10
+        arp = self.alpharp*self.state.arp + output*self.wrp
+        self.state = reducedNeuronState(
+                         eps0=eps0.detach(),
+                         eps1=eps1,
+                         arp=arp)
+        return output, pv
+
+
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
@@ -236,17 +286,22 @@ class Conv2dDCLLlayer(nn.Module):
             pool_pad = (pooling[1]-1)//2
             self.pooling = pooling[0]
             print(pooling[0], pooling[1], pool_pad)
-            self.pool = nn.AvgPool2d(kernel_size=pooling[0], stride=pooling[1], padding = pool_pad)
+            self.pool = nn.MaxPool2d(kernel_size=pooling[0], stride=pooling[1], padding = pool_pad)
         else:
             self.pooling = 1
             self.pool = lambda x: x
         self.kernel_size = kernel_size
         self.target_size = target_size
-        self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
+        if wrp>0:
+            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp)
+        else:
+            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
+        ##best 
+        #self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
+        self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=True)
         self.i2o.weight.requires_grad = False
-        #self.i2o.bias.requires_grad = False
-        #self.softmax = nn.LogSoftmax(dim=1)
+        self.i2o.bias.requires_grad = False
+        self.softmax = nn.Softmax(dim=1)
         self.init_dcll()
 
     def get_flat_size(self):
@@ -258,7 +313,7 @@ class Conv2dDCLLlayer(nn.Module):
         pvp = self.pool(pv)
         flatten = pvp.view(-1, self.get_flat_size())
         pvoutput = self.i2o(flatten)
-        output = output.detach()
+        #output = output.detach()
         return self.pool(output), pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
@@ -273,7 +328,7 @@ class Conv2dDCLLlayer(nn.Module):
         limit = 1e-32
         # limit = .1
         self.i2h.weight.data = torch.tensor(np.random.uniform(-limit, limit, size=[self.out_channels, self.in_channels, self.kernel_size, self.kernel_size])).float()
-        self.i2h.bias.data = torch.tensor(np.ones([self.out_channels])-1).float()
+        self.i2h.bias.data = torch.tensor(np.zeros([self.out_channels])).float()
 
 class DCLLBase(nn.Module):
     def __init__(self, dclllayer, name='DCLLbase', batch_size=48, loss = torch.nn.MSELoss, optimizer = optim.SGD, kwargs_optimizer = {'lr':5e-5}, burnin = 200, collect_stats = False):
@@ -312,7 +367,8 @@ class DCLLBase(nn.Module):
         if self.iter>=self.burnin:
             #self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
-            loss = self.crit(pvoutput, target) #+ 1e-3*(torch.norm(pv-.5,2))
+            loss = self.crit(pvoutput, target) + 2e-6*(torch.norm(pv-.5,2))
+            #print(self.crit(pvoutput, target).mean(), 1e-5*((torch.norm(pv-.5,2)).mean()))
             loss.backward()
             self.optimizer.step()
         return output, pvoutput, pv
@@ -320,7 +376,8 @@ class DCLLBase(nn.Module):
 class DCLLClassification(DCLLBase):
     def forward(self, input):
         o, p, pv = super(DCLLClassification, self).forward(input)
-        self.clout.append(p.argmax(1).detach().cpu().numpy())
+        if self.iter>=self.burnin:
+            self.clout.append(p.argmax(1).detach().cpu().numpy())
         return o,p,pv
 
     def write_stats(self, writer, label, epoch):
