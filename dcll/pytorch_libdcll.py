@@ -248,7 +248,7 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         '''
         super(CLLConv2DRRPModule, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, alpha, alphas)
 
-        ##best 
+        ##best
         #self.tarp=10
         self.wrp=wrp
         self.alpharp=alpharp
@@ -311,7 +311,7 @@ class Conv2dDCLLlayer(nn.Module):
             self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp)
         else:
             self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
-        ##best 
+        ##best
         #self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
         self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=True)
         self.i2o.weight.requires_grad = False
