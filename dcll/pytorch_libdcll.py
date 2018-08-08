@@ -133,7 +133,7 @@ class DenseDCLLlayer(nn.Module):
         return self.out_channels
 
     def forward(self, input):
-        input   = input.view(-1,self.in_channels).detach()
+        input   = input.view(-1,self.in_channels)
         output, pv = self.i2h(input)
         pvoutput = self.i2o(pv)
         output = output.detach()
