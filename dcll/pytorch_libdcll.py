@@ -112,8 +112,8 @@ class CLLDenseModule(nn.Module):
         return output, pv
 
 class CLLDenseRRPModule(CLLDenseModule):
-    def __init__(self, in_channels, out_channels, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100):
-        super(CLLDenseRRPModule, self).__init__(in_channels, out_channels, bias, alpha, alphas)
+    def __init__(self, in_channels, out_channels, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100, act = nn.Sigmoid()):
+        super(CLLDenseRRPModule, self).__init__(in_channels, out_channels, bias, alpha, alphas, act)
         self.wrp=wrp
         self.alpharp=alpharp
 
@@ -148,7 +148,7 @@ class CLLDenseRRPModule(CLLDenseModule):
         return output, pv
 
 class DenseDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0.):
+    def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid()):
         if (target_size is None):
             target_size = out_channels
         super(DenseDCLLlayer, self).__init__()
@@ -156,9 +156,9 @@ class DenseDCLLlayer(nn.Module):
         self.out_channels = out_channels
         self.target_size = target_size
         if wrp>0:
-            self.i2h = CLLDenseRRPModule(in_channels,out_channels, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, bias = bias)
+            self.i2h = CLLDenseRRPModule(in_channels,out_channels, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, bias = bias, act = act)
         else:
-            self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas, bias = bias)
+            self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas, bias = bias, act = act)
         self.i2o = nn.Linear(out_channels, target_size, bias=True)
         self.i2o.weight.requires_grad = False
         self.i2o.bias.requires_grad = False
