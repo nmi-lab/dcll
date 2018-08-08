@@ -156,7 +156,7 @@ class DenseDCLLlayer(nn.Module):
         self.out_channels = out_channels
         self.target_size = target_size
         if wrp>0:
-            self.i2h = CLLDenseRRPModule(in_channels,out_channels, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp)
+            self.i2h = CLLDenseRRPModule(in_channels,out_channels, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, bias = bias)
         else:
             self.i2h = CLLDenseModule(in_channels,out_channels, alpha=alpha, alphas=alphas, bias = bias)
         self.i2o = nn.Linear(out_channels, target_size, bias=True)
