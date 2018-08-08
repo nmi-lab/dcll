@@ -276,12 +276,12 @@ class CLLConv2DModule(nn.Module):
         return torch.zeros(batch_size, self.in_channels, im_width, im_height)
 
 class CLLConv2DRRPModule(CLLConv2DModule):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100, act = nn.Sigmoid()):
         '''
         Continuous local learning with relative refractory period. No isyn or vmem dynamics for speed and memory.
         *wrp*: weight for the relative refractory period
         '''
-        super(CLLConv2DRRPModule, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, alpha, alphas)
+        super(CLLConv2DRRPModule, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, alpha, alphas, act)
 
         ##best
         #self.tarp=10
@@ -322,7 +322,7 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         return output, pv
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
@@ -342,9 +342,9 @@ class Conv2dDCLLlayer(nn.Module):
         self.kernel_size = kernel_size
         self.target_size = target_size
         if wrp>0:
-            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp)
+            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
         else:
-            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas)
+            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, act = act)
         ##best
         #self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
         self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=True)
