@@ -588,7 +588,6 @@ def ann_demo_pla_2D(N):
     *Inputs*:
     *N*: number of data samples
     '''
-    import time
     X, S = ann_createDataSet(N)
     # Initialize the weigths to zeros
     w = np.zeros(3)
