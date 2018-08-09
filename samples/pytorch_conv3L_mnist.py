@@ -11,7 +11,7 @@
 #-----------------------------------------------------------------------------
 from dcll.pytorch_libdcll import *
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
-import time
+import timeit
 
 def acc(pvoutput, labels):
     return float(torch.mean((pvoutput.argmax(1) == labels.argmax(1)).float()))
