@@ -166,9 +166,6 @@ class DenseDCLLlayer(nn.Module):
         self.input_size = self.out_channels
         self.init_dcll()
 
-    def get_flat_size(self):
-        return self.out_channels
-
     def forward(self, input):
         input   = input.view(-1,self.in_channels)
         output, pv = self.i2h(input)
@@ -237,15 +234,22 @@ class CLLConv2DModule(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def init_state(self, batch_size, im_width, im_height, init_value = 0):
-        dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
-        isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+    def get_output_shape(self, im_height, im_width):
+        dummy_input = torch.zeros(1, self.in_channels, im_height, im_width)
+        if self.weight.is_cuda:
+            dummy_input = dummy_input.to(device)
+        out_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+        return out_shape[1:] # remove batch_size
+
+    def init_state(self, batch_size, im_height, im_width, init_value = 0):
+        input_shape = [batch_size, self.in_channels, im_height, im_width]
+        isyn_shape =  torch.Size([batch_size]) + self.get_output_shape(im_height, im_width)
 
         self.state = NeuronState(
             isyn = torch.zeros(isyn_shape).detach().to(device)+init_value,
             vmem = torch.zeros(isyn_shape).detach().to(device)+init_value,
-            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
-            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value
+            eps0 = torch.zeros(input_shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(input_shape).detach().to(device)+init_value
             )
         return self.state
 
@@ -288,16 +292,16 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         self.wrp=wrp
         self.alpharp=alpharp
 
-    def init_state(self, batch_size, im_width, im_height, init_value = 0):
-        dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
-        isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+    def init_state(self, batch_size, im_height, im_width, init_value = 0):
+        input_shape = [batch_size, self.in_channels, im_height, im_width]
+        isyn_shape =  torch.Size([batch_size]) + self.get_output_shape(im_height, im_width)
 
         self.state = reducedNeuronState(
-            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
-            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
+            eps0 = torch.zeros(input_shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(input_shape).detach().to(device)+init_value,
             arp = torch.zeros(isyn_shape).detach().to(device)+init_value
             )
-        return self
+        return self.state
 
     def forward(self, input):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
@@ -322,7 +326,7 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         return output, pv
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
+    def __init__(self, in_channels, out_channels, kernel_size=5, stride=1, im_height=28, im_width=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
@@ -342,25 +346,22 @@ class Conv2dDCLLlayer(nn.Module):
         self.kernel_size = kernel_size
         self.target_size = target_size
         if wrp>0:
-            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
+            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, stride=stride, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
         else:
-            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, act = act)
-        ##best
-        #self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=True)
+            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, stride=stride, padding=padding, alpha = alpha, alphas = alphas, act = act)
+        conv_shape = self.i2h.get_output_shape(self.im_height, self.im_width)
+        self.output_shape = self.pool(torch.zeros(1, *conv_shape)).shape[1:]
+        self.i2o = nn.Linear(np.prod(self.output_shape), target_size, bias=True)
         self.i2o.weight.requires_grad = False
         self.i2o.bias.requires_grad = False
         self.softmax = nn.Softmax(dim=1)
         self.init_dcll()
 
-    def get_flat_size(self):
-        return int(self.im_height*self.im_width*self.out_channels//self.pooling**2)
-
     def forward(self, input):
         input     = input.detach()
         output, pv = self.i2h(input)
         pvp = self.pool(pv)
-        flatten = pvp.view(-1, self.get_flat_size())
+        flatten = pvp.view(pvp.shape[0], -1)
         pvoutput = self.i2o(flatten)
         #output = output.detach()
         return self.pool(output), pvoutput, pv
@@ -370,8 +371,8 @@ class Conv2dDCLLlayer(nn.Module):
         return self
 
     def init_dcll(self):
-        nh = self.get_flat_size()
-        limit = np.sqrt(6.0 / (nh + self.target_size))
+        nh = np.prod(self.output_shape)
+        limit = np.sqrt(6.0 / nh + self.target_size)
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
         limit = 1e-32
