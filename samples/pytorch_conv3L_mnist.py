@@ -21,13 +21,15 @@ class ConvNetwork(torch.nn.Module):
                  target_size, out_channels_1, out_channels_2, out_channels_3):
         super(ConvNetwork, self).__init__()
         self.layer1 = Conv2dDCLLlayer(in_channels, out_channels = out_channels_1,
-                                      im_width=im_width, im_height=im_height, target_size=target_size,
+                                      im_height=im_height, im_width=im_width, target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7, act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
+        o_shape = self.layer1.output_shape
         self.layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2,
-                                      im_width=im_width/2, im_height=im_height/2, target_size=target_size,
+                                      im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7, act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
+        o_shape = self.layer2.output_shape
         self.layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3,
-                                      im_width=im_width/4, im_height=im_height/4, target_size=target_size,
+                                      im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
                                       pooling=1, padding=3, kernel_size=7, act = torch.nn.Tanh()).to(device).init_hiddens(batch_size)
 
     def zero_grad(self):

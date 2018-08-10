@@ -19,6 +19,9 @@ from collections import namedtuple
 import logging
 from collections import Counter
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 # if gpu is to be used
 device = 'cuda'
 
@@ -88,8 +91,8 @@ class CLLDenseModule(nn.Module):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
         # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
         if not (input.shape[0] == self.state.isyn.shape[0] == self.state.vmem.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
-            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
-                            .format(self.state.isyn.shape[0], input.shape[0]))
+            logger.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+                           .format(self.state.isyn.shape[0], input.shape[0]))
             self.init_state(input.shape[0])
 
         # clamp alphas to [0,1] range
@@ -129,7 +132,7 @@ class CLLDenseRRPModule(CLLDenseModule):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
         # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
         if not (input.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
-            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+            logger.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
                             .format(self.state.eps0.shape[0], input.shape[0]))
             self.init_state(input.shape[0])
 
@@ -165,9 +168,6 @@ class DenseDCLLlayer(nn.Module):
         # self.softmax = nn.LogSoftmax(dim=1)
         self.input_size = self.out_channels
         self.init_dcll()
-
-    def get_flat_size(self):
-        return self.out_channels
 
     def forward(self, input):
         input   = input.view(-1,self.in_channels)
@@ -237,15 +237,22 @@ class CLLConv2DModule(nn.Module):
         if self.bias is not None:
             self.bias.data.uniform_(-stdv, stdv)
 
-    def init_state(self, batch_size, im_width, im_height, init_value = 0):
-        dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
-        isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+    def get_output_shape(self, im_height, im_width):
+        dummy_input = torch.zeros(1, self.in_channels, im_height, im_width)
+        if self.weight.is_cuda:
+            dummy_input = dummy_input.to(device)
+        out_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+        return out_shape[1:] # remove batch_size
+
+    def init_state(self, batch_size, im_height, im_width, init_value = 0):
+        input_shape = [batch_size, self.in_channels, im_height, im_width]
+        isyn_shape =  torch.Size([batch_size]) + self.get_output_shape(im_height, im_width)
 
         self.state = NeuronState(
             isyn = torch.zeros(isyn_shape).detach().to(device)+init_value,
             vmem = torch.zeros(isyn_shape).detach().to(device)+init_value,
-            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
-            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value
+            eps0 = torch.zeros(input_shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(input_shape).detach().to(device)+init_value
             )
         return self.state
 
@@ -253,7 +260,7 @@ class CLLConv2DModule(nn.Module):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
         # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
         if not (input.shape[0] == self.state.isyn.shape[0] == self.state.vmem.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
-            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+            logger.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
                             .format(self.state.isyn.shape[0], input.shape[0]))
             self.init_state(input.shape[0], input.shape[2], input.shape[3])
 
@@ -262,7 +269,6 @@ class CLLConv2DModule(nn.Module):
         vmem = self.alpha*self.state.vmem + isyn
         eps0 = input + self.alphas * self.state.eps0
         eps1 = self.alpha * self.state.eps1 + eps0
-        eps1 = eps1.detach()
         pv = torch.sigmoid(F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups))
         output = (vmem > 0).float()
         # update the neuronal state
@@ -288,22 +294,22 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         self.wrp=wrp
         self.alpharp=alpharp
 
-    def init_state(self, batch_size, im_width, im_height, init_value = 0):
-        dummy_input = torch.zeros(batch_size, self.in_channels, im_height, im_width).to(device)
-        isyn_shape =  F.conv2d(dummy_input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups).shape
+    def init_state(self, batch_size, im_height, im_width, init_value = 0):
+        input_shape = [batch_size, self.in_channels, im_height, im_width]
+        isyn_shape =  torch.Size([batch_size]) + self.get_output_shape(im_height, im_width)
 
         self.state = reducedNeuronState(
-            eps0 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
-            eps1 = torch.zeros(dummy_input.shape).detach().to(device)+init_value,
+            eps0 = torch.zeros(input_shape).detach().to(device)+init_value,
+            eps1 = torch.zeros(input_shape).detach().to(device)+init_value,
             arp = torch.zeros(isyn_shape).detach().to(device)+init_value
             )
-        return self
+        return self.state
 
     def forward(self, input):
         # input: input tensor of shape (minibatch x in_channels x iH x iW)
         # weight: filters of shape (out_channels x (in_channels / groups) x kH x kW)
         if not (input.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
-            logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
+            logger.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
                             .format(self.state.eps0.shape[0], input.shape[0]))
             self.init_state(input.shape[0], input.shape[2], input.shape[3])
 
@@ -322,7 +328,7 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         return output, pv
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_width=28, im_height=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
+    def __init__(self, in_channels, out_channels, kernel_size=5, stride=1, im_height=28, im_width=28, target_size=10, pooling=None, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_width = im_width
         self.im_height = im_height
@@ -334,7 +340,6 @@ class Conv2dDCLLlayer(nn.Module):
 
             pool_pad = (pooling[1]-1)//2
             self.pooling = pooling[0]
-            print(pooling[0], pooling[1], pool_pad)
             self.pool = nn.MaxPool2d(kernel_size=pooling[0], stride=pooling[1], padding = pool_pad)
         else:
             self.pooling = 1
@@ -342,35 +347,31 @@ class Conv2dDCLLlayer(nn.Module):
         self.kernel_size = kernel_size
         self.target_size = target_size
         if wrp>0:
-            self.i2h = CLLConv2DRRPModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
+            self.i2h = CLLConv2DRRPModule(in_channels, out_channels, kernel_size, stride=stride, padding=padding, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
         else:
-            self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, alpha = alpha, alphas = alphas, act = act)
-        ##best
-        #self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=False)
-        self.i2o = nn.Linear(im_height*im_width*out_channels//self.pooling**2, target_size, bias=True)
+            self.i2h = CLLConv2DModule(in_channels, out_channels, kernel_size, stride=stride, padding=padding, alpha = alpha, alphas = alphas, act = act)
+        conv_shape = self.i2h.get_output_shape(self.im_height, self.im_width)
+        self.output_shape = self.pool(torch.zeros(1, *conv_shape)).shape[1:]
+        self.i2o = nn.Linear(np.prod(self.output_shape), target_size, bias=True)
         self.i2o.weight.requires_grad = False
         self.i2o.bias.requires_grad = False
         self.softmax = nn.Softmax(dim=1)
         self.init_dcll()
 
-    def get_flat_size(self):
-        return int(self.im_height*self.im_width*self.out_channels//self.pooling**2)
-
     def forward(self, input):
-        input     = input.detach()
         output, pv = self.i2h(input)
-        pvp = self.pool(pv)
-        flatten = pvp.view(-1, self.get_flat_size())
+        output, pv = self.pool(output), self.pool(pv)
+        flatten = pv.view(pv.shape[0], -1)
         pvoutput = self.i2o(flatten)
         #output = output.detach()
-        return self.pool(output), pvoutput, pv
+        return output, pvoutput, pv
 
     def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, self.im_height, self.im_width, init_value = init_value)
         return self
 
     def init_dcll(self):
-        nh = self.get_flat_size()
+        nh = np.prod(self.output_shape)
         limit = np.sqrt(6.0 / (nh + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
