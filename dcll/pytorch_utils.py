@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from collections import namedtuple
 
 def grad_parameters(module):
     return filter(lambda p: p.requires_grad, module.parameters())
@@ -24,11 +25,25 @@ def roll(tensor, shift, axis):
     after = tensor.narrow(axis, after_start, shift)
     return torch.cat([after, before], axis)
 
+class ForwardHook(object):
+    def __init__(self, writer, what_to_record, title, initial_time):
+        self.writer = writer
+        self.what_to_record = what_to_record
+        self.title = title
+        self.recording_time = initial_time
+
+    def __call__(self, *args, **kw):
+        data = self.what_to_record(*args)
+        if isinstance(data, dict):
+            self.writer.add_scalars(self.title, data, self.recording_time)
+        else:
+            self.writer.add_scalar(self.title, data, self.recording_time)
+        self.recording_time += 1
+
 class NetworkDumper(object):
     def __init__(self, writer, model):
         self.writer = writer
         self.model = model
-        self.handle = None
 
     def histogram(self, prefix="", t=0):
         params = named_grad_parameters(self.model)
@@ -49,20 +64,7 @@ class NetworkDumper(object):
                                       t, bins='fd')
 
     def start_recording(self, what_to_record, title="forward_data", t=0):
-        hook = lambda *args, **kw: self.forward_hook(what_to_record, *args, **kw)
-        self.handle = self.model.register_forward_hook(hook)
-        self.recording_time = t
-        self.data_name = title
-
-    def forward_hook(self, what_to_record, *args):
-        # import ipdb; ipdb.set_trace()
-        data = what_to_record(*args)
-        if isinstance(data, dict):
-            self.writer.add_scalars(self.data_name, data, self.recording_time)
-        else:
-            self.writer.add_scalar(self.data_name, data, self.recording_time)
-
-        self.recording_time += 1
-
-    def stop_recording(self):
-        self.handle.remove()
+        # create user-specified forward hook
+        hook = ForwardHook(self.writer, what_to_record, title, t)
+        # register and return the handle
+        return self.model.register_forward_hook(hook)
