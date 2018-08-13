@@ -1,6 +1,9 @@
 import torch
 import numpy as np
 from collections import namedtuple
+import matplotlib.pyplot as plt
+import cv2
+import gym
 
 def grad_parameters(module):
     return filter(lambda p: p.requires_grad, module.parameters())
@@ -68,3 +71,90 @@ class NetworkDumper(object):
         hook = ForwardHook(self.writer, what_to_record, title, t)
         # register and return the handle
         return self.model.register_forward_hook(hook)
+
+
+"""Transform a gym environment's observation space to pixel through the render() method"""
+class FrameObs(gym.ObservationWrapper):
+    def __init__(self, env, width=32, height=32, crop=True, render=False):
+        gym.ObservationWrapper.__init__(self, env)
+        self.width = width
+        self.height = height
+        self.observation_space = gym.spaces.Box(low=0, high=1.,
+                                                # torch order (CHW)
+                                                shape=(1, self.height, self.width))
+        self.render_plot = render
+        self.crop = crop
+        if (self.render_plot):
+            self.obs_plot = plt.imshow(np.zeros((self.height, self.width)))
+
+    def observation(self, obs):
+        frame = self.render(mode='rgb_array')
+        return frame
+
+    def _observation(self, obs):
+        return self.observation(obs)
+
+    def render(self, mode, **kwargs):
+        frame = self.env.render(mode, **kwargs)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+        if self.crop:
+            half = np.array(frame.shape) // 2
+            frame = frame[
+                half[0]-self.height // 2 : half[0]+self.height // 2,
+                half[1]-self.width // 2 : half[1]+self.width // 2
+            ]
+        else:
+            frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
+
+        frame = 1. - np.ascontiguousarray(frame, dtype=np.float32) / 255.
+        if (self.render_plot):
+            self.obs_plot.set_data(frame)
+            plt.imshow(frame, cmap=plt.get_cmap('gray'))
+            plt.pause(0.0001)
+        frame = np.expand_dims(frame, axis=0) # unsqueeze channel into torch order (CHW)
+        return frame
+
+class DVSObs(FrameObs):
+    def __init__(self, env, width=32, height=32, crop=True, render=False, threshold=0.1):
+        super(DVSObs, self).__init__(env, width, height, crop, render)
+        # DVS has two channels: ON/OFF
+        self.observation_space = gym.spaces.Box(low=0, high=1,
+                                                # torch is (CHW)
+                                                shape=(2, self.height, self.width))
+        self.current_frame = np.zeros((self.height, self.width))
+
+        if (self.render_plot):
+            self.obs_plot = plt.imshow(np.zeros((self.height, self.width, 3)))
+
+        self.threshold = threshold
+
+    def render(self, mode, **kwargs):
+        frame = self.env.render(mode, **kwargs)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+        if self.crop:
+            half = np.array(frame.shape) // 2
+            frame = frame[
+                half[0]-self.height // 2 : half[0]+self.height // 2,
+                half[1]-self.width // 2 : half[1]+self.width // 2
+            ]
+        else:
+            frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
+
+        frame = np.ascontiguousarray(frame, dtype=np.float32) / 255.
+        diff = frame - self.current_frame
+        # zero out all pixels not above threshold
+        diff[(-self.threshold < diff) & (diff < self.threshold)] = 0.
+        # split positive and negative channels
+        ret = np.array( [ diff > 0, diff < 0 ], dtype=np.float32)
+        # update the current frame
+        events = np.nonzero(diff)
+        self.current_frame[events] += diff[events]
+
+        if (self.render_plot):
+            self.obs_plot.set_data(frame)
+            rgb = np.append(ret, [np.zeros_like(ret[0])], axis=0)
+            plt.imshow(np.moveaxis(rgb, 0, 2))
+            plt.pause(0.0001)
+        return ret
