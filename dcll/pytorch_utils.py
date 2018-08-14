@@ -35,10 +35,16 @@ class ForwardHook(object):
         self.title = title
         self.recording_time = initial_time
 
+
     def __call__(self, *args, **kw):
         data = self.what_to_record(*args)
         if isinstance(data, dict):
             self.writer.add_scalars(self.title, data, self.recording_time)
+        elif isinstance(data, torch.Tensor):
+            self.writer.add_image(self.title, data, self.recording_time)
+        if isinstance(data, list):
+            for i, elem in enumerate(data):
+                self.writer.add_image(self.title + str(i) , elem, self.recording_time)
         else:
             self.writer.add_scalar(self.title, data, self.recording_time)
         self.recording_time += 1
