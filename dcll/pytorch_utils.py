@@ -37,9 +37,9 @@ class ForwardHook(object):
 
 
     def write_data(self, data, comment=""):
-        # if dictionary of 1 item, we use the key as extra comment
+        # if dictionary of 1 item, we use the key as comment
         if isinstance(data, dict) and len(data) == 1:
-            comment = str(data.keys()[0]) + comment
+            comment = '_' + str(data.keys()[0])
             data = data.values()[0]
         # write the data wrt datatype
         if isinstance(data, dict):
@@ -57,7 +57,7 @@ class ForwardHook(object):
         if not isinstance(layer_debug, list):
             self.write_data(layer_debug)
         else:
-            [ self.write_data(d, comment=str(i)) for i, d in enumerate(layer_debug) ]
+            [ self.write_data(d, comment='_idx_'+str(i)) for i, d in enumerate(layer_debug) ]
         self.recording_time += 1
 
 class NetworkDumper(object):
