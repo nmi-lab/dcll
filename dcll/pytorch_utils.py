@@ -30,29 +30,34 @@ def roll(tensor, shift, axis):
     return torch.cat([after, before], axis)
 
 class ForwardHook(object):
-    def __init__(self, writer, what_to_record, title, initial_time):
+    def __init__(self, writer, title, initial_time):
         self.writer = writer
-        self.what_to_record = what_to_record
         self.title = title
         self.recording_time = initial_time
 
 
     def write_data(self, data, comment=""):
+        # if dictionary of 1 item, we use the key as extra comment
+        if isinstance(data, dict) and len(data) == 1:
+            comment = str(data.keys()[0]) + comment
+            data = data.values()[0]
+        # write the data wrt datatype
         if isinstance(data, dict):
             self.writer.add_scalars(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1:
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
-            self.writer.add_image(self.title + comment, data, self.recording_time)
+            img = vutils.make_grid(data.unsqueeze(dim=1)) # grey color channel
+            self.writer.add_image(self.title + comment, img, self.recording_time)
         else:
             raise NotImplementedError
 
-    def __call__(self, *args, **kw):
-        data = self.what_to_record(*args)
-        if not isinstance(data, list):
-            self.write_data(data)
+    def __call__(self, ctx, input, output):
+        layer_debug = output[-1]
+        if not isinstance(layer_debug, list):
+            self.write_data(layer_debug)
         else:
-            [ self.write_data(d, comment=str(i)) for i, d in enumerate(data) ]
+            [ self.write_data(d, comment=str(i)) for i, d in enumerate(layer_debug) ]
         self.recording_time += 1
 
 class NetworkDumper(object):
@@ -97,9 +102,9 @@ class NetworkDumper(object):
                                       param.cpu().detach().numpy().flatten() - self.cached[i],
                                       t, bins='fd')
 
-    def start_recording(self, what_to_record, title="forward_data", t=0):
+    def start_recording(self, title="forward_data", t=0):
         # create user-specified forward hook
-        hook = ForwardHook(self.writer, what_to_record, title, t)
+        hook = ForwardHook(self.writer, title, t)
         # register and return the handle
         return self.model.register_forward_hook(hook)
 
