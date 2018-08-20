@@ -4,6 +4,7 @@ from collections import namedtuple
 import matplotlib.pyplot as plt
 import cv2
 import gym
+import torchvision.utils as vutils
 
 def grad_parameters(module):
     return filter(lambda p: p.requires_grad, module.parameters())
@@ -36,17 +37,22 @@ class ForwardHook(object):
         self.recording_time = initial_time
 
 
+    def write_data(self, data, comment=""):
+        if isinstance(data, dict):
+            self.writer.add_scalars(self.title + comment, data, self.recording_time)
+        elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1:
+            self.writer.add_scalar(self.title + comment, data, self.recording_time)
+        elif isinstance(data, torch.Tensor):
+            self.writer.add_image(self.title + comment, data, self.recording_time)
+        else:
+            raise NotImplementedError
+
     def __call__(self, *args, **kw):
         data = self.what_to_record(*args)
-        if isinstance(data, dict):
-            self.writer.add_scalars(self.title, data, self.recording_time)
-        elif isinstance(data, torch.Tensor):
-            self.writer.add_image(self.title, data, self.recording_time)
-        if isinstance(data, list):
-            for i, elem in enumerate(data):
-                self.writer.add_image(self.title + str(i) , elem, self.recording_time)
+        if not isinstance(data, list):
+            self.write_data(data)
         else:
-            self.writer.add_scalar(self.title, data, self.recording_time)
+            [ self.write_data(d, comment=str(i)) for i, d in enumerate(data) ]
         self.recording_time += 1
 
 class NetworkDumper(object):
@@ -60,6 +66,25 @@ class NetworkDumper(object):
             self.writer.add_histogram(prefix+name,
                                       param.cpu().detach().numpy().flatten(),
                                       t, bins='fd')
+    def weight2d(self, prefix="", t=0):
+        params = named_grad_parameters(self.model)
+        # filter out all params that don't correspond to convolutions (KCHW)
+        params = list(filter(lambda p: len(p[1].shape) == 4 and
+                             (p[1].shape[1] == 1 or 2 or 3), params))
+        def enforce_1_or_3_channels(p):
+            if p[1].shape[1] == 2:
+                pad = torch.zeros(p[1].shape[0], 1, p[1].shape[2], p[1].shape[3])
+                new_p1 = torch.cat((p[1].cpu(), pad), dim=1)
+            return [p[0], new_p1]
+        params = list(map(enforce_1_or_3_channels, params))
+        all_filters = [
+            vutils.make_grid(l[1]).unsqueeze(dim=1)
+            for l in params
+        ]
+        for i, img in enumerate(all_filters):
+            self.writer.add_image(prefix+params[i][0],
+                                  img, t)
+
     # cache the current parameters of the model
     def cache(self):
         self.cached = named_grad_parameters(self.model)
