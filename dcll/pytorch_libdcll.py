@@ -393,7 +393,7 @@ class Conv2dDCLLlayer(nn.Module):
         return self
 
     def init_dcll(self):
-        nh = np.prod(self.output_shape)
+        nh = np.prod(self.get_flat_size())
         limit = np.sqrt(6.0 / (nh + self.target_size))
         self.M = torch.tensor(np.random.uniform(-limit, limit, size=[nh, self.target_size])).float()
         self.i2o.weight.data = self.M.t()
