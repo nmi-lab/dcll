@@ -34,8 +34,11 @@ class SequenceGenerator(object):
         batch_size = 32,
         chunk_size = 500,
         ds = 2,
-        size = [2, 64, 64]):
+        size = [2, 64, 64],
+        dt = 1000):
 
+        self.group = group
+        self.dt = dt
         self.ds = ds
         self.size = size
         f = h5py.File(filename, 'r', swmr=True, libver="latest")
@@ -49,14 +52,25 @@ class SequenceGenerator(object):
         self.i = 0
 
     def next(self):
-        dat,lab = next(
-                self.grp1,
-                stats = self.stats,
-                batch_size = self.batch_size,
-                T = self.chunk_size,
-                n_classes = self.num_classes,
-                size = self.size,
-                ds = self.ds)
+        if self.group != 'test':
+            dat,lab = next(
+                    self.grp1,
+                    stats = self.stats,
+                    batch_size = self.batch_size,
+                    T = self.chunk_size,
+                    n_classes = self.num_classes,
+                    size = self.size,
+                    ds = self.ds,
+                    dt = self.dt)
+        else:
+            dat,lab = next_1ofeach(
+                    self.grp1,
+                    T = self.chunk_size,
+                    n_classes = self.num_classes,
+                    size = self.size,
+                    ds = self.ds,
+                    dt = self.dt)
+
         return dat, lab
 
 #def find_first(a, i):
@@ -153,8 +167,16 @@ def aedat_to_events(filename):
 #        sorted_events[label] = np.concatenate([sorted_events[label],events[:,:,:,start:end]])    
 #
 #    return sorted_events
+def compute_start_time(labels,pad):
+    l0 = np.arange(len(labels[:,0]), dtype='int')
+    np.random.shuffle(l0)
+    label = labels[l0[0],0]
+    tbegin = labels[l0[0],1]
+    tend = labels[l0[0],2]-pad
+    start_time = np.random.randint(tbegin, tend)
+    return start_time, label
 
-def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64]):
+def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000):
     batch = np.empty([batch_size,T]+size, dtype='float')
     batch_idx = np.random.randint(0,len(hdf5_group), size=batch_size)
     batch_idx_l = np.empty(batch_size, dtype= 'int')
@@ -162,16 +184,31 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
     for i, b in (enumerate(batch_idx)):
         dset = hdf5_group[str(b)]
         labels = dset['labels'].value
-        l0 = np.arange(len(labels[:,0]), dtype='int')
-        np.random.shuffle(l0)
-        label = labels[l0[0],0]
+        start_time, label = compute_start_time(labels, pad = 2*T*dt)
         batch_idx_l[i] = label-1
-        start_time = np.random.randint(labels[l0[0],1],labels[l0[0],2]-2*T*1e3)
-
         #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
-        batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size)
+        batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
     #print(batch_idx_l)
     return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
+
+def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000):
+    batch_1of_each = {k:range(len(v['labels'].value)) for k,v in hdf5_group.items()}
+    batch_size = np.sum([len(v) for v in batch_1of_each.values()])
+    batch = np.empty([batch_size,T]+size, dtype='float')
+    batch_idx_l = np.empty(batch_size, dtype= 'int')
+    i = 0
+    for b,v in batch_1of_each.items():
+        for l0 in v:
+            dset = hdf5_group[str(b)]
+            labels = dset['labels'].value
+            label = labels[l0,0]
+            batch_idx_l[i] = label-1
+            start_time = labels[l0,1]
+            #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
+            batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
+            i += 1
+    return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
+
 
 #def get_time_slice(labels, label, T):
 #    idxs = np.where([labels[:,0] == label])[1]
@@ -181,10 +218,10 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
 #    
 #    return start_time
 
-def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1):
+def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 1000):
     idx_beg = find_first(times, start_time)
-    idx_end = find_first(times[idx_beg:], start_time+T*1000)+idx_beg
-    return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=1000, chunk_size=T, size = size, ds = ds)
+    idx_end = find_first(times[idx_beg:], start_time+T*dt)+idx_beg
+    return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=dt, chunk_size=T, size = size, ds = ds)
 
 def create_events_hdf5():
     fns_train = gather_aedat('/share/data/DvsGesture/aedat/',1,24)
@@ -230,9 +267,9 @@ def create_events_hdf5():
 
 
 
-def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4):
-    strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds)
-    stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds)
+def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
+    strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
+    stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
     return strain, stest
 
 def plot_gestures_imshow(images, labels, nim=11, avg=50):
