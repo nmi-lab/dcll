@@ -15,3 +15,34 @@ pip install -e .
 
 By using **-e** option of pip, the files will be symlink'ed to your virtualenv instead of copied.
 This means that you can modify the files of this repo without having to install it again for the changes to take effect.
+
+## How to use
+
+Check out some samples like `samples/pytorch_dense1L_mnist.py`.
+
+### Tensorboard integration
+
+We provide some utility functions for plotting to tensorboard.
+
+```python
+from tensorboardX import SummaryWriter
+from dcll.pytorch_utils import NetworkDumper
+import torch
+
+net = torch.nn.Linear(100, 10)
+
+ndumper = NetworkDumper(writer, net)
+
+###### Plot activation from forward function
+what_to_record = lambda ctx, input, output: output.mean()
+handle = ndumper.start_recording(what_to_record, title='mean output')
+
+for i in range(50):
+    net.forward(torch.rand(100))
+
+handle.remove()
+
+###### Plot weight histogram
+ndumper.histogram()
+
+```
