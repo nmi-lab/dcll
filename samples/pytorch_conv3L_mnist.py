@@ -22,15 +22,39 @@ class ConvNetwork(torch.nn.Module):
         super(ConvNetwork, self).__init__()
         self.layer1 = Conv2dDCLLlayer(in_channels, out_channels = out_channels_1,
                                       im_height=im_height, im_width=im_width, target_size=target_size,
-                                      pooling=2, padding=3, kernel_size=7, act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
+                                      pooling=2, padding=3, kernel_size=7,
+                                      act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
         o_shape = self.layer1.output_shape
         self.layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2,
                                       im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
-                                      pooling=2, padding=3, kernel_size=7, act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
+                                      pooling=2, padding=3, kernel_size=7,
+                                      act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
         o_shape = self.layer2.output_shape
         self.layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3,
                                       im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
-                                      pooling=1, padding=3, kernel_size=7, act = torch.nn.Tanh()).to(device).init_hiddens(batch_size)
+                                      pooling=1, padding=3, kernel_size=7,
+                                      act = torch.nn.Tanh()).to(device).init_hiddens(batch_size)
+        self.init_weights()
+
+    def init_weights(self):
+        method_ = torch.nn.init.xavier_normal_
+        for m in self.modules():
+            if isinstance(m, Conv2dDCLLlayer):
+                param = None
+                if isinstance(m.i2h.act, torch.nn.ReLU):
+                    act = 'relu'
+                elif isinstance(m.i2h.act, torch.nn.LeakyReLU) or isinstance(m.i2h.act, torch.nn.ELU):
+                    act = 'leaky_relu'
+                    param = self.negative_slope
+                elif isinstance(m.i2h.act, torch.nn.ReLU):
+                    act = 'relu'
+                else:
+                    act = 'tanh'
+                gain = torch.nn.init.calculate_gain(act, param) * 0.1
+                m.i2h.bias.data.mul_(gain)
+                torch.nn.init.xavier_normal_(m.i2h.weight, gain=gain)
+                torch.nn.init.xavier_normal_(m.i2o.weight, gain=gain)
+
 
     def zero_grad(self):
         self.layer1.zero_grad()
@@ -41,9 +65,8 @@ class ConvNetwork(torch.nn.Module):
         output1, pvoutput1, _ = self.layer1.forward(x)
         output2, pvoutput2, _ = self.layer2.forward(output1)
         output3, pvoutput3, _ = self.layer3.forward(output2)
+        return (output1, output2, output3), (pvoutput1, pvoutput2, pvoutput3)
 
-        return [(output1, output2, output3),
-                (pvoutput1, pvoutput2, pvoutput3)]
 
 if __name__ == '__main__':
     from tensorboardX import SummaryWriter
