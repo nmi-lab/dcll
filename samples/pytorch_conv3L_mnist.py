@@ -17,21 +17,21 @@ def acc(pvoutput, labels):
     return float(torch.mean((pvoutput.argmax(1) == labels.argmax(1)).float()))
 
 class ConvNetwork(torch.nn.Module):
-    def __init__(self, im_height, im_width, batch_size,
+    def __init__(self, im_dims, batch_size,
                  target_size, out_channels_1, out_channels_2, out_channels_3):
         super(ConvNetwork, self).__init__()
         self.layer1 = Conv2dDCLLlayer(in_channels, out_channels = out_channels_1,
-                                      im_height=im_height, im_width=im_width, target_size=target_size,
+                                      im_dims=im_dims, target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7,
                                       act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
         o_shape = self.layer1.output_shape
         self.layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2,
-                                      im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
+                                      im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7,
                                       act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
         o_shape = self.layer2.output_shape
         self.layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3,
-                                      im_height=o_shape[1], im_width=o_shape[2], target_size=target_size,
+                                      im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
                                       pooling=1, padding=3, kernel_size=7,
                                       act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
         self.init_weights()
@@ -94,12 +94,11 @@ if __name__ == '__main__':
     out_channels_1 = 32//2
     out_channels_2 = 48//2
     out_channels_3 = 64//2
-    im_width = 28
-    im_height = 28
+    im_dims = (28, 28)
     batch_size = 64
     target_size = 10
 
-    net = ConvNetwork(im_height, im_width, batch_size, target_size, out_channels_1, out_channels_2, out_channels_3)
+    net = ConvNetwork(im_dims, batch_size, target_size, out_channels_1, out_channels_2, out_channels_3)
     dumper = NetworkDumper(writer, net)
 
     criterion = nn.MSELoss().to(device)
@@ -118,7 +117,7 @@ if __name__ == '__main__':
         input = torch.Tensor(input).to(device).reshape(n_iters,
                                                        batch_size,
                                                        in_channels,
-                                                       im_width,im_height)
+                                                       *im_dims)
         if epoch == 0:
             # initialize network weight with respect to the first batch
             # Method described in "ALL YOU NEED IS A GOOD INIT", ICLR 2016
@@ -163,7 +162,7 @@ if __name__ == '__main__':
         input = torch.Tensor(input).to(device).reshape(n_iters,
                                                        batch_size,
                                                        in_channels,
-                                                       im_width,im_height)
+                                                       *im_dims)
         labels1h = torch.Tensor(labels1h).to(device)
 
         for iter in range(n_iters-100):
