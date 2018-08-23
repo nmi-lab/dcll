@@ -249,8 +249,7 @@ class CLLConv2DModule(nn.Module):
         if not (input.shape[0] == self.state.eps0.shape[0] == self.state.eps1.shape[0]):
             logging.warning("Batch size changed from {} to {} since last iteration. Reallocating states."
                             .format(self.state.eps0.shape[0], input.shape[0]))
-
-            self.init_state(input.shape[0], input.shape[2], input.shape[3])
+            self.init_state(input.shape[0], input.shape[2:4])
 
        # isyn = F.conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
        # isyn += self.alphas*self.state.isyn
