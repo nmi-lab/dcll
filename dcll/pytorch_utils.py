@@ -79,8 +79,8 @@ class NetworkDumper(object):
         def enforce_1_or_3_channels(p):
             if p[1].shape[1] == 2:
                 pad = torch.zeros(p[1].shape[0], 1, p[1].shape[2], p[1].shape[3])
-                new_p1 = torch.cat((p[1].cpu(), pad), dim=1)
-            return [p[0], new_p1]
+                p[1] = torch.cat((p[1].cpu(), pad), dim=1)
+            return p
         params = list(map(enforce_1_or_3_channels, params))
         all_filters = [
             vutils.make_grid(l[1]).unsqueeze(dim=1)
@@ -103,7 +103,6 @@ class NetworkDumper(object):
                                       t, bins='fd')
 
     def start_recording(self, title="forward_data", t=0):
-        # create user-specified forward hook
         hook = ForwardHook(self.writer, title, t)
         # register and return the handle
         return self.model.register_forward_hook(hook)

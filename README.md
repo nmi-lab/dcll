@@ -34,8 +34,7 @@ net = torch.nn.Linear(100, 10)
 ndumper = NetworkDumper(writer, net)
 
 ###### Plot activation from forward function
-what_to_record = lambda ctx, input, output: output.mean()
-handle = ndumper.start_recording(what_to_record, title='mean output')
+handle = ndumper.start_recording(title='activation')
 
 for i in range(50):
     net.forward(torch.rand(100))
