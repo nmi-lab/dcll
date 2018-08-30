@@ -66,13 +66,13 @@ class NetworkDumper(object):
         self.model = model
 
     def histogram(self, prefix="", t=0):
-        params = named_grad_parameters(self.model)
+        params = self.model.named_parameters()
         for name, param in params:
             self.writer.add_histogram(prefix+name,
                                       param.cpu().detach().numpy().flatten(),
                                       t, bins='fd')
     def weight2d(self, prefix="", t=0):
-        params = named_grad_parameters(self.model)
+        params = self.model.named_parameters()
         # filter out all params that don't correspond to convolutions (KCHW)
         params = list(filter(lambda p: len(p[1].shape) == 4 and
                              (p[1].shape[1] == 1 or 2 or 3), params))
