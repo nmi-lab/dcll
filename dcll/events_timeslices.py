@@ -6,7 +6,6 @@ Email : duguyue100@gmail.com
 from __future__ import print_function
 
 import numpy as np
-from sklearn.utils import resample
 from scipy.sparse import coo_matrix as sparse_matrix
 
 def expand_targets(targets, T=500, burnin=0):
