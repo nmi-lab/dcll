@@ -300,7 +300,7 @@ if __name__ == '__main__':
                     output6, _, _ = dcll_slices[5].forward(output5   )
 
                 acc_test[epoch//n_test_interval,i,:] = [ s.accuracy(labels1h_test) for s in dcll_slices]
-                acc__test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[-1,i])])
+                acc__test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[epoch//n_test_interval,i])])
                 print('TEST Epoch {0} Batch {1}:'.format(epoch, i) + acc__test_print)
                 [s.write_stats(writer, label = 'test/', epoch = epoch) for s in dcll_slices]
 
