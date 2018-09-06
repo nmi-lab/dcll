@@ -7,10 +7,10 @@ import gym
 import torchvision.utils as vutils
 
 def grad_parameters(module):
-    return filter(lambda p: p.requires_grad, module.parameters())
+    return list(filter(lambda p: p.requires_grad, module.parameters()))
 
 def named_grad_parameters(module):
-    return filter(lambda p: p[1].requires_grad, module.named_parameters())
+    return list(filter(lambda p: p[1].requires_grad, module.named_parameters()))
 
 def roll(tensor, shift, axis):
     if shift == 0:
