@@ -39,8 +39,8 @@ class ForwardHook(object):
     def write_data(self, data, comment=""):
         # if dictionary of 1 item, we use the key as comment
         if isinstance(data, dict) and len(data) == 1:
-            comment = '_' + str(data.keys()[0])
-            data = data.values()[0]
+            comment = '_' + str(list(data)[0])
+            data = list(data.values())[0]
         # write the data wrt datatype
         if isinstance(data, dict):
             self.writer.add_scalars(self.title + comment, data, self.recording_time)
