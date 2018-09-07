@@ -41,10 +41,11 @@ class ForwardHook(object):
         if isinstance(data, dict) and len(data) == 1:
             comment = '_' + str(list(data)[0])
             data = list(data.values())[0]
+
         # write the data wrt datatype
         if isinstance(data, dict):
             self.writer.add_scalars(self.title + comment, data, self.recording_time)
-        elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1:
+        elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1: # single value
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
             img = vutils.make_grid(data.unsqueeze(dim=1)) # grey color channel
