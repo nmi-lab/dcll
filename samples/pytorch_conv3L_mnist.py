@@ -24,12 +24,12 @@ class ConvNetwork(torch.nn.Module):
                                       im_dims=im_dims, target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7,
                                       act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
-        o_shape = self.layer1.output_shape
+        o_shape = torch.Size([out_channels_1]) + self.layer1.output_shape
         self.layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2,
                                       im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
                                       pooling=2, padding=3, kernel_size=7,
                                       act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
-        o_shape = self.layer2.output_shape
+        o_shape = torch.Size([out_channels_2]) + self.layer2.output_shape
         self.layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3,
                                       im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
                                       pooling=1, padding=3, kernel_size=7,
