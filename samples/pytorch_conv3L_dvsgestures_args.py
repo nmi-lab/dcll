@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : Sun 29 Jul 2018 01:37:45 PM PDT
+# Last Modified : Tue 11 Sep 2018 09:33:40 AM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
@@ -17,14 +17,17 @@ import argparse
 
 parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
 parser.add_argument('--batchsize', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
-parser.add_argument('--epochs', type=int, default=500, metavar='N', help='number of epochs to train (default: 10)')
+parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
 #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
-parser.add_argument('--alphas', type=float, default=.85, metavar='N', help='Time constant for synapse')
+parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
+parser.add_argument('--beta', type=float, default=.95, metavar='N', help='Beta2 parameters for Adamax')
+parser.add_argument('--lc_ampl', type=float, default=.5, metavar='N', help='magnitude of local classifier init')
+parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
 
 args = parser.parse_args()
 #args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -39,7 +42,6 @@ np.random.seed(0)
 #Method for computing classification accuracy
 acc = accuracy_by_vote
 
-
 n_epochs = args.epochs
 n_test_interval = args.testinterval
 n_tests_total = n_epochs//n_test_interval+1
@@ -50,14 +52,15 @@ dt = 1000 #us
 in_channels = 2
 ds = 4
 im_dims = im_width, im_height = (128//ds, 128//ds)
-out_channels_1 = 128//2
-out_channels_2 = 256//2
-out_channels_3 = 256//2
-out_channels_4 = 256//2
-out_channels_5 = 1024//2
-out_channels_6 = 1024//2
+out_channels_1 = 128
+out_channels_2 = 256
+out_channels_3 = 256
+out_channels_4 = 512
+out_channels_5 = 1024
+out_channels_6 = 1024
 target_size = 11
-
+act=nn.Sigmoid()
+#act = nn.ReLU()
 #ALLConv
 layer1 = Conv2dDCLLlayer(
         in_channels,
@@ -71,7 +74,9 @@ layer1 = Conv2dDCLLlayer(
         alpha = args.alpha,
         alphas = args.alphas,
         alpharp = .65,
-        wrp = 0,).to(device)
+        wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl).to(device)
 
 layer2 = Conv2dDCLLlayer(
         in_channels = layer1.out_channels,
@@ -84,7 +89,9 @@ layer2 = Conv2dDCLLlayer(
         alpha = args.alpha,
         alphas = args.alphas,
         alpharp = .65,
-        wrp = 0,).to(device)
+        wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl).to(device)
 
 layer3 = Conv2dDCLLlayer(
         in_channels = layer2.out_channels,
@@ -97,7 +104,9 @@ layer3 = Conv2dDCLLlayer(
         alpha = args.alpha,
         alphas = args.alphas,
         alpharp = .65,
-        wrp = 0,).to(device)
+        wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl).to(device)
 
 layer4 = Conv2dDCLLlayer(
         in_channels = layer3.out_channels,
@@ -111,6 +120,8 @@ layer4 = Conv2dDCLLlayer(
         alphas = args.alphas,
         alpharp = .65,
         wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl
         ).to(device)
 
 layer5 = Conv2dDCLLlayer(
@@ -125,6 +136,8 @@ layer5 = Conv2dDCLLlayer(
         alphas = args.alphas,
         alpharp = .65,
         wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl
         ).to(device)
 
 layer6 = Conv2dDCLLlayer(
@@ -133,12 +146,14 @@ layer6 = Conv2dDCLLlayer(
         im_dims = layer5.get_output_shape(),
         target_size=target_size,
         pooling=1,
-        padding=0,
-        kernel_size=1,
+        padding=1,
+        kernel_size=3,
         alpha = args.alpha,
         alphas = args.alphas,
         alpharp = .65,
         wrp = 0,
+        act = act,
+        lc_ampl = args.lc_ampl
         ).to(device)
 
 
@@ -154,7 +169,7 @@ layer6 = Conv2dDCLLlayer(
 
 #Adamax parameters { 'betas' : [.0, .99]}
 opt = optim.Adamax
-opt_param = {'lr':args.lr, 'betas' : [.0, .95]}
+opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
 #opt = optim.SGD
 loss = torch.nn.SmoothL1Loss
 #opt_param = {'lr':3e-4}
@@ -242,24 +257,29 @@ acc_train = []
 from tensorboardX import SummaryWriter
 import datetime,socket,os
 current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-comment='_Conv_{0}L_lr:{1}_alpha:{2}_alphas:{3}'.format(len(dcll_slices), args.lr, args.alpha, args.alphas)
-log_dir = os.path.join('runs_args/', 'pytorch_conv3L_dvsgestures_', current_time + '_' + socket.gethostname() + comment)
+comment=str(args)[10:].replace(' ', '_')
+log_dir = os.path.join('runs_args/', 'pytorch_conv3L_dvsgestures_args_', current_time + '_' + socket.gethostname() +'_' + comment, )
 print(log_dir)
 
-if not args.no_save:
-    d = mksavedir()
-    annotate(d, text = log_dir, filename= 'log_filename')
-    save_source(d)
-
-
 writer = SummaryWriter(log_dir = log_dir)
-input_test, labels_test = gen_test.next()
-input_tests = []
-labels1h_tests = []
-n_test = int(np.ceil(input_test.shape[0]/batch_size))
-for i in range(n_test):
-    input_tests.append( torch.Tensor(input_test.swapaxes(0,1))[:,i*batch_size:(i+1)*batch_size].reshape(n_iters_test,-1,in_channels,im_width,im_height))
-    labels1h_tests.append(torch.Tensor(labels_test[:,i*batch_size:(i+1)*batch_size]))
+
+def generate_test(gen_test, valid=None):
+    input_test, labels_test = gen_test.next()
+    input_tests = []
+    labels1h_tests = []
+    if valid:
+        n_test = 1
+    else:
+        n_test = int(np.ceil(input_test.shape[0]/batch_size))
+    for i in range(n_test):
+        input_tests.append( torch.Tensor(input_test.swapaxes(0,1))[:,i*batch_size:(i+1)*batch_size].reshape(n_iters_test,-1,in_channels,im_width,im_height))
+        labels1h_tests.append(torch.Tensor(labels_test[:,i*batch_size:(i+1)*batch_size]))
+    return n_test, input_tests, labels1h_tests
+
+n_test, input_tests, labels1h_tests = generate_test(gen_test, valid = args.valid)
+print('Ntest is :')
+print(n_test)
+
 
 [s.init(batch_size, init_states = True) for s in dcll_slices]
 
@@ -267,6 +287,12 @@ acc_test = np.empty([n_tests_total,n_test,len(dcll_slices)])
 
 
 if __name__ == '__main__':
+
+    if not args.no_save:
+        d = mksavedir()
+        annotate(d, text = log_dir, filename= 'log_filename')
+        annotate(d, text = str(args), filename= 'args')
+        save_source(d)
     for epoch in range(n_epochs):
         print(epoch)
         input, labels = gen_train.next()

@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : Wed 1 Aug 2018 10:05
+# Last Modified : Wed 12 Sep 2018 10:50:47 AM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
@@ -215,6 +215,7 @@ class CLLConv2DModule(nn.Module):
         self.reset_parameters()
         self.alpha = alpha
         self.alphas = alphas
+        print(act)
 
 
     def reset_parameters(self):
@@ -325,18 +326,18 @@ class CLLConv2DRRPModule(CLLConv2DModule):
         return output, pv
 
 class Conv2dDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=5, im_dims=(28,28), target_size=10, pooling=None, stride=1, dilation=1, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid()):
+    def __init__(self, in_channels, out_channels, kernel_size=5, im_dims=(28,28), target_size=10, pooling=None, stride=1, dilation=1, padding = 2, alpha=.95, alphas=.9, alpharp =.65, wrp = 0, act = nn.Sigmoid(), lc_ampl = .5):
         super(Conv2dDCLLlayer, self).__init__()
         self.im_dims = im_dims
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.lc_ampl = lc_ampl
         if pooling is not None:
             if not hasattr(pooling, '__len__'):
                 pooling = (pooling, pooling)
 
             pool_pad = (pooling[0]-1)//2
             self.pooling = pooling[1]
-            print(pooling[0], pooling[1], pool_pad)
             pool_pad = (pooling[1]-1)//2
             self.pooling = pooling[0]
             self.pool = nn.MaxPool2d(kernel_size=pooling[0], stride=pooling[1], padding = pool_pad)
@@ -350,10 +351,24 @@ class Conv2dDCLLlayer(nn.Module):
         else:
             self.i2h = CLLConv2DModule(in_channels,out_channels, kernel_size, padding=padding, dilation=dilation, stride=stride, alpha = alpha, alphas = alphas, act = act)
         conv_shape = self.i2h.get_output_shape(self.im_dims)
+        print('Conv2D Layer ', self.im_dims, conv_shape, self.in_channels, self.out_channels, kernel_size, dilation, padding, stride)
         self.output_shape = self.pool(torch.zeros(1, *conv_shape)).shape[1:]
         self.i2o = nn.Linear(np.prod(self.get_flat_size()), target_size, bias=True)
         self.i2o.weight.requires_grad = False
         self.i2o.bias.requires_grad = False
+        self.reset_lc_parameters()
+
+#    def reset_lc_parameters(self):
+#        limit = np.sqrt(100000.0 / (np.prod(self.get_flat_size()) + self.target_size))
+#        M = torch.tensor(np.random.uniform(-limit, limit, size=[np.prod(self.get_flat_size()), self.target_size])).float()
+#        self.i2o.weight.data = M.t()
+
+    def reset_lc_parameters(self):
+        stdv = self.lc_ampl / math.sqrt(self.i2o.weight.size(1))
+        self.i2o.weight.data.uniform_(-stdv, stdv)
+        if self.i2o.bias is not None:
+            self.i2o.bias.data.uniform_(-stdv, stdv)
+
 
     def get_flat_size(self):
         w,h = self.get_output_shape()

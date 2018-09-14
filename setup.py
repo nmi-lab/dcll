@@ -25,5 +25,5 @@ setup(
     test_suite = 'nose.collector',
     long_description=long_description,
     # license='FZI',
-    install_requires=[]
+    install_requires=["tensorboardX","h5py"]
 )

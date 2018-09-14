@@ -32,6 +32,8 @@ var/
 .installed.cfg
 *.egg
 Results*
+runs*
+samples/data*
 __gen__*
 
 # PyInstaller
@@ -68,7 +70,6 @@ docs/_build/
 target/
 dcll.egg-info/
 *.pyc
-runs/
 
 .project
 .pydevproject
