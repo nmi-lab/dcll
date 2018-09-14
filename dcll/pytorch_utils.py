@@ -7,10 +7,10 @@ import gym
 import torchvision.utils as vutils
 
 def grad_parameters(module):
-    return filter(lambda p: p.requires_grad, module.parameters())
+    return list(filter(lambda p: p.requires_grad, module.parameters()))
 
 def named_grad_parameters(module):
-    return filter(lambda p: p[1].requires_grad, module.named_parameters())
+    return list(filter(lambda p: p[1].requires_grad, module.named_parameters()))
 
 def roll(tensor, shift, axis):
     if shift == 0:
@@ -39,12 +39,13 @@ class ForwardHook(object):
     def write_data(self, data, comment=""):
         # if dictionary of 1 item, we use the key as comment
         if isinstance(data, dict) and len(data) == 1:
-            comment = '_' + str(data.keys()[0])
-            data = data.values()[0]
+            comment = '_' + str(list(data)[0])
+            data = list(data.values())[0]
+
         # write the data wrt datatype
         if isinstance(data, dict):
             self.writer.add_scalars(self.title + comment, data, self.recording_time)
-        elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1:
+        elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1: # single value
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
             img = vutils.make_grid(data.unsqueeze(dim=1)) # grey color channel
@@ -66,21 +67,27 @@ class NetworkDumper(object):
         self.model = model
 
     def histogram(self, prefix="", t=0):
-        params = named_grad_parameters(self.model)
+        params = self.model.named_parameters()
         for name, param in params:
             self.writer.add_histogram(prefix+name,
                                       param.cpu().detach().numpy().flatten(),
                                       t, bins='fd')
     def weight2d(self, prefix="", t=0):
-        params = named_grad_parameters(self.model)
+        params = self.model.named_parameters()
         # filter out all params that don't correspond to convolutions (KCHW)
         params = list(filter(lambda p: len(p[1].shape) == 4 and
-                             (p[1].shape[1] == 1 or 2 or 3), params))
+                             ((p[1].shape[1] == 1) or
+                              (p[1].shape[1] == 2) or
+                              (p[1].shape[1] == 3)), params))
         def enforce_1_or_3_channels(p):
-            if p[1].shape[1] == 2:
+            if not p[1].shape[1] == 2:
+                return p
+            else:
                 pad = torch.zeros(p[1].shape[0], 1, p[1].shape[2], p[1].shape[3])
-                p[1] = torch.cat((p[1].cpu(), pad), dim=1)
-            return p
+                new_p = ( p[0],
+                          torch.cat((p[1].cpu(), pad), dim=1) )
+                return new_p
+
         params = list(map(enforce_1_or_3_channels, params))
         all_filters = [
             vutils.make_grid(l[1]).unsqueeze(dim=1)
@@ -193,3 +200,55 @@ class DVSObs(FrameObs):
             plt.imshow(np.moveaxis(rgb, 0, 2))
             plt.pause(0.0001)
         return ret
+
+class AERObs(gym.ObservationWrapper):
+    def __init__(self, env, threshold=0.1):
+        gym.ObservationWrapper.__init__(self, env)
+        # DVS has two channels: ON/OFF
+        self.observation_space = gym.spaces.Box(low=0, high=1,
+                                                # torch is (CHW)
+                                                shape=(2,
+                                                       env.observation_space.shape[0],
+                                                       env.observation_space.shape[1]))
+        self.normalizer = env.observation_space.high
+        self.current_frame = np.zeros(env.observation_space.shape)
+        self.threshold = threshold
+
+    def observation(self, obs):
+        if len(obs.shape) > 2:
+            obs = cv2.cvtColor(obs / self.normalizer, cv2.COLOR_RGB2GRAY)
+        frame = np.ascontiguousarray(obs, dtype=np.float32)
+        diff = frame - self.current_frame
+        # zero out all pixels not above threshold
+        diff[(-self.threshold < diff) & (diff < self.threshold)] = 0.
+        # split positive and negative channels
+        ret = np.array( [ diff > 0, diff < 0 ], dtype=np.float32)
+        # update the current frame
+        events = np.nonzero(diff)
+        self.current_frame[events] += diff[events]
+        self.current_events = ret
+        return ret
+
+    def _observation(self, obs):
+        return self.observation(obs)
+
+    def render(self, mode='human', **kwargs):
+        rgb = np.append(self.current_events, [np.zeros_like(self.current_events[0])], axis=0)
+        rgb = np.moveaxis(rgb, 0, 2)
+
+        # Create Figure for rendering
+        if not hasattr(self, 'fig'):  # initialize figure and plotting axes
+            self.fig, self.ax_full = plt.subplots()
+        self.ax_full.axis('off')
+
+        self.fig.show()
+        # Only create the image the first time
+        if not hasattr(self, 'ax_full_img'):
+            self.ax_full_img = self.ax_full.imshow(rgb, animated=True)
+        # Update the image data for efficient live video
+        self.ax_full_img.set_data(rgb)
+        plt.draw()
+        # Update the figure display immediately
+        self.fig.canvas.draw()
+
+        return self.fig
