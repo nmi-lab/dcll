@@ -6,6 +6,16 @@ import cv2
 import gym
 import torchvision.utils as vutils
 
+def enforce_1_or_3_channels(im):
+    if im.shape[0] == 2:
+        pad = torch.zeros(1, im.shape[1], im.shape[2])
+        new_im = torch.cat((im.cpu(), pad), dim=0)
+        return new_im
+    elif im.shape[0] == 0 or im.shape[0] == 3:
+        return im
+    else:
+        raise NotImplementedError
+
 def grad_parameters(module):
     return list(filter(lambda p: p.requires_grad, module.parameters()))
 
@@ -48,7 +58,7 @@ class ForwardHook(object):
         elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1: # single value
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
-            img = vutils.make_grid(data.unsqueeze(dim=1)) # grey color channel
+            img = vutils.make_grid(data.unsqueeze(dim=1) / torch.max(data)) # grey color channel
             self.writer.add_image(self.title + comment, img, self.recording_time)
         else:
             raise NotImplementedError
