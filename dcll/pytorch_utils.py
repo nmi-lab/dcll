@@ -262,3 +262,49 @@ class AERObs(gym.ObservationWrapper):
         self.fig.canvas.draw()
 
         return self.fig
+
+class FrameResizer(gym.ObservationWrapper):
+    def __init__(self, env, shape):
+        gym.ObservationWrapper.__init__(self, env)
+        if len(env.observation_space.shape) > 2:
+            # torch is (CHW)
+            shape = (env.observation_space.shape, shape[0], shape[1])
+        else:
+            shape = (shape[0], shape[1])
+
+        self.observation_space = gym.spaces.Box(low=env.observation_space.low[0][0],
+                                                high=env.observation_space.high[0][0],
+                                                shape=shape)
+
+        self.shape = shape
+        self.last_observation = np.zeros(shape)
+
+    def observation(self, obs):
+        self.last_observation = cv2.resize(obs, self.shape)
+        return self.last_observation
+
+    def _observation(self, obs):
+        return self.observation(obs)
+
+    def render(self, mode='human', **kwargs):
+        # Create Figure for rendering
+        if not hasattr(self, 'fig'):  # initialize figure and plotting axes
+            self.fig, self.ax_full = plt.subplots()
+            if hasattr(self.env.unwrapped, 'title'):
+                self.ax_full.set_title(self.env.unwrapped.title)
+        self.ax_full.axis('off')
+
+        self.fig.show()
+        # Only create the image the first time
+        if not hasattr(self, 'ax_full_img'):
+            self.ax_full_img = self.ax_full.imshow(self.last_observation, animated=True, cmap='viridis',
+                                                   vmin = self.observation_space.low[0][0],
+                                                   vmax = self.observation_space.high[0][0]
+            )
+        # Update the image data for efficient live video
+        self.ax_full_img.set_data(self.last_observation)
+        plt.draw()
+        # Update the figure display immediately
+        self.fig.canvas.draw()
+
+        return self.fig
