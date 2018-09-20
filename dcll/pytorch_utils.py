@@ -40,11 +40,11 @@ def roll(tensor, shift, axis):
     return torch.cat([after, before], axis)
 
 class ForwardHook(object):
-    def __init__(self, writer, title, initial_time):
+    def __init__(self, writer, title, initial_time, debounce_img = 150):
         self.writer = writer
         self.title = title
         self.recording_time = initial_time
-
+        self.debounce = debounce_img
 
     def write_data(self, data, comment=""):
         # if dictionary of 1 item, we use the key as comment
@@ -58,8 +58,9 @@ class ForwardHook(object):
         elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1: # single value
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
-            img = vutils.make_grid(data.unsqueeze(dim=1) / torch.max(data)) # grey color channel
-            self.writer.add_image(self.title + comment, img, self.recording_time)
+            if self.recording_time % self.debounce == 0:
+                img = vutils.make_grid(data.unsqueeze(dim=1) / torch.max(data)) # grey color channel
+                self.writer.add_image(self.title + comment, img, self.recording_time)
         else:
             raise NotImplementedError
 
