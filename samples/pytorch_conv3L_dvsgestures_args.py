@@ -20,7 +20,7 @@ parser.add_argument('--batchsize', type=int, default=64, metavar='N', help='inpu
 parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
 #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
-parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
+parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed (default: 0)')
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
@@ -33,8 +33,8 @@ args = parser.parse_args()
 #args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
 
 
 
