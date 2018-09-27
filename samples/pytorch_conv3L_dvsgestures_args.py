@@ -8,7 +8,7 @@
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 from dcll.pytorch_libdcll import *
 from dcll.experiment_tools import *
 from dcll.load_dvsgestures_sparse import *
@@ -300,7 +300,7 @@ if __name__ == '__main__':
         labels1h = torch.Tensor(labels).to(device)
 
         [s.init(batch_size, init_states = False) for s in dcll_slices]
-        
+
         for iter in range(n_iters):
             output1, _, pv1 = dcll_slices[0].train(input[iter],labels1h[iter])
             output2, _, pv2 = dcll_slices[1].train(output1,    labels1h[iter])
@@ -309,7 +309,7 @@ if __name__ == '__main__':
             output5, _, pv5 = dcll_slices[4].train(output4,    labels1h[iter])
             output6, _, pv6 = dcll_slices[5].train(output5,    labels1h[iter])
 
-        if (epoch%n_test_interval)==1:
+        if (epoch%n_test_interval)==0:
 
             print('TEST Epoch {0}: '.format(epoch))
             for i in range(n_test):
@@ -334,8 +334,7 @@ if __name__ == '__main__':
             np.save(d+'/acc_test.npy', acc_test)
             annotate(d, text = "", filename = "best result")
 
-        
+
 
         #[writer.add_scalar('train/acc/layer{0}'.format(i), acc_train[-1][i], epoch) for i in range(len(dcll_slices))]
         #[writer.add_scalar('test/acc/layer{0}'.format(i), acc_test[-1][i], epoch) for i in range(len(dcll_slices))]
-
