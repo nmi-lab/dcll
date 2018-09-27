@@ -50,7 +50,7 @@ class ConvNetwork():
                                     kernel_size=conf[1], padding=conf[2], pooling=conf[3],
                                     im_dims=inp[1:3], # height, width
                                     target_size=target_size,
-                                    alpha=alpha[0], alphas=alpha[1], act = torch.nn.ReLU()).to(device).init_hiddens(1)
+                                    alpha=alpha[0], alphas=alpha[1], act = act).to(device).init_hiddens(1)
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
         n = im_dims
@@ -142,7 +142,6 @@ if __name__ == '__main__':
         print(epoch)
         input, labels = image2spiketrain(*gen_train.next())
 
-        import ipdb; ipdb.set_trace()
         input = torch.Tensor(input).to(device).reshape(n_iters,
                                                        batch_size,
                                                        *im_dims)
