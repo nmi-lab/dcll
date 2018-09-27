@@ -13,6 +13,7 @@ from dcll.pytorch_libdcll import *
 from dcll.experiment_tools import *
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
 import timeit
+from tqdm import tqdm
 
 import argparse
 
@@ -54,6 +55,7 @@ class ConvNetwork():
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
         n = im_dims
+
         self.layer1, n = make_conv(n, convs[0])
         self.layer2, n = make_conv(n, convs[1])
         self.layer3, n = make_conv(n, convs[2])
@@ -78,13 +80,14 @@ class ConvNetwork():
     def train(self, x, labels):
         # x = input[iter]
         # labels = labels1h[iter]
-        for dcll_slice in self.dcll_slices:
-            spikes, _, pv = dcll_slices[0].train(x, labels)
-            x = spikes
+        spikes = x
+
+        for sl in self.dcll_slices:
+            spikes, _, pv = sl.train(spikes, labels)
 
     def test(self, x):
-        for dcll_slice in self.dcll_slices:
-            spikes, _, _ = dcll_slices[0].forward(x)
+        for sl in self.dcll_slices:
+            spikes, _, _ = sl.forward(x)
             x = spikes
 
     def reset(self):
@@ -132,14 +135,13 @@ if __name__ == '__main__':
         annotate(d, text = str(args), filename= 'args')
         save_source(d)
 
-    n_tests_total = args.n_epochs//args.n_test_interval+1
+    n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
     acc_test = np.empty([n_tests_total, 1, len(net.dcll_slices)])
 
     from dcll.load_mnist import *
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = batch_size)
 
-    for epoch in range(args.n_epochs):
-        print(epoch)
+    for epoch in tqdm(range(args.n_epochs)):
         input, labels = image2spiketrain(*gen_train.next())
 
         input = torch.Tensor(input).to(device).reshape(n_iters,
@@ -153,8 +155,7 @@ if __name__ == '__main__':
             net.train(x = input[iter], labels=labels1h[iter])
 
         # Test
-        if (epoch % args.n_test_interval)==1:
-            print('TEST Epoch {0}: '.format(epoch))
+        if (epoch % args.n_test_interval)==0:
             input, labels1h = image2spiketrain(*gen_test.next())
             input = torch.Tensor(input).to(device).reshape(n_iters,
                                                            batch_size,
@@ -164,9 +165,9 @@ if __name__ == '__main__':
             for iter in range(n_iters):
                 net.test(x = input[iter])
 
-            acc_test[epoch//args.n_test_interval, 0, :] = net.accuracy(labels1h[iter])
+            acc_test[epoch//args.n_test_interval, 0, :] = net.accuracy(labels1h)
             acc_test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[epoch//args.n_test_interval, 0])])
-            print('TEST Epoch {0} Batch {1}:'.format(epoch, i) + acc_test_print)
+            print('TEST Epoch {0}:'.format(epoch) + acc_test_print)
             net.write_stats(writer, epoch)
         if not args.no_save:
             np.save(d+'/acc_test.npy', acc_test)
