@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import cv2
 import gym
 import torchvision.utils as vutils
+import matplotlib.animation as animation
 
 def enforce_1_or_3_channels(im):
     if im.shape[0] == 2:
@@ -38,6 +39,24 @@ def roll(tensor, shift, axis):
     before = tensor.narrow(axis, 0, dim_size - shift)
     after = tensor.narrow(axis, after_start, shift)
     return torch.cat([after, before], axis)
+
+def make_video_from_frames(frames, interval=30, title="animation", filename="animation.mp4", **kwargs):
+    anim_writer = animation.writers['ffmpeg'](fps=30)
+    ani_fig, ani_ax = plt.subplots()
+    ani_ax.axis('off')
+    ani_ax.set_title(title)
+    ani_fig.set_size_inches([5,5])
+    ani_im = ani_ax.imshow(frames[0],
+                           animated=True, cmap='viridis',
+                           **kwargs)
+
+    def ani_update(i):
+        ani_im.set_data(frames[i])
+        return ani_im
+
+    ani = animation.FuncAnimation(ani_fig, ani_update, len(frames), interval=interval)
+    ani.save(filename, writer=anim_writer, dpi=100)
+    plt.close(ani_fig)
 
 class ForwardHook(object):
     def __init__(self, writer, title, initial_time, debounce_img = 150):

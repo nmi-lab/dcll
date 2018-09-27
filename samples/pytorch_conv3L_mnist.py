@@ -123,7 +123,6 @@ if __name__ == '__main__':
             # Method described in "ALL YOU NEED IS A GOOD INIT", ICLR 2016
             net.init_weights_from_batches(input[0:200], var_tolerance = 1e-3)
 
-
         labels1h = torch.Tensor(labels1h).to(device)
 
         for iter in range(n_iters):
