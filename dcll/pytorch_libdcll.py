@@ -440,14 +440,12 @@ class DCLLBase(nn.Module):
         *label*: label, to append the tensorboard entry
         '''
         if self.collect_stats:
-            name = self.name+'/'+'/activation_custom_stat/'+label
+            name = self.name+'/activation_custom_stat/'+label
             pd = np.mean(self.activity_hist,axis=0)
             pd = pd /pd.sum()
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[0]+pd[-1]), epoch)
-
-            print(self.name + " {0:1.3}".format(pd[0]+pd[-1]))
 
     def train(self, input, target):
         output, pvoutput, pv = self.forward(input)

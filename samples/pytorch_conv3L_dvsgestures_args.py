@@ -37,8 +37,6 @@ torch.manual_seed(args.seed)
 np.random.seed(args.seed)
 
 
-
-
 #Method for computing classification accuracy
 acc = accuracy_by_vote
 

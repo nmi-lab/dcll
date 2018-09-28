@@ -20,7 +20,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
-    parser.add_argument('--batchsize', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
+    parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
     parser.add_argument('--n_epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
     #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
@@ -39,7 +39,7 @@ def parse_args():
 class ConvNetwork():
     def __init__(self, im_dims, batch_size,
                  target_size, act,
-                 loss, opt, opt_param,
+                 loss, opt, opt_param, lc_ampl,
                  alpha=[0.85, 0.9]
     ):
         # format: (out_channels, kernel_size, padding, pooling)
@@ -51,7 +51,11 @@ class ConvNetwork():
                                     kernel_size=conf[1], padding=conf[2], pooling=conf[3],
                                     im_dims=inp[1:3], # height, width
                                     target_size=target_size,
-                                    alpha=alpha[0], alphas=alpha[1], act = act).to(device).init_hiddens(1)
+                                    alpha=alpha[0], alphas=alpha[1], act = act,
+                                    lc_ampl = lc_ampl,
+                                    alpharp = .65,
+                                    wrp = 0,
+            ).to(device).init_hiddens(1)
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
         n = im_dims
@@ -106,13 +110,12 @@ if __name__ == '__main__':
 
     import datetime,socket,os
     current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs_args/', 'pytorch_conv3L_mnist_', current_time + '_' + socket.gethostname() +'_' + args.comment, )
+    log_dir = os.path.join('runs/', 'pytorch_conv3L_mnist_', current_time + '_' + socket.gethostname() +'_' + args.comment, )
     print(log_dir)
 
 
     n_iters = 500
     im_dims = (1, 28, 28)
-    batch_size = 64
     target_size = 10
 
     opt = optim.Adamax
@@ -120,9 +123,9 @@ if __name__ == '__main__':
     #opt = optim.SGD
     loss = torch.nn.SmoothL1Loss
 
-    net = ConvNetwork(im_dims, batch_size, target_size,
-                      act=nn.Sigmoid(), alpha=[args.alpha, args.alphas],
-                      loss=loss, opt=opt, opt_param=opt_param
+    net = ConvNetwork(im_dims, args.batch_size, target_size,
+                      act=nn.ReLU(), alpha=[args.alpha, args.alphas],
+                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl
     )
 
     from tensorboardX import SummaryWriter
@@ -139,13 +142,13 @@ if __name__ == '__main__':
     acc_test = np.empty([n_tests_total, 1, len(net.dcll_slices)])
 
     from dcll.load_mnist import *
-    gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = batch_size)
+    gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
 
     for epoch in tqdm(range(args.n_epochs)):
         input, labels = image2spiketrain(*gen_train.next())
 
         input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                       batch_size,
+                                                       args.batch_size,
                                                        *im_dims)
         labels1h = torch.Tensor(labels).to(device)
         net.reset()
@@ -158,7 +161,7 @@ if __name__ == '__main__':
         if (epoch % args.n_test_interval)==0:
             input, labels1h = image2spiketrain(*gen_test.next())
             input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                           batch_size,
+                                                           args.batch_size,
                                                            *im_dims)
             labels1h = torch.Tensor(labels).to(device)
             net.reset()
