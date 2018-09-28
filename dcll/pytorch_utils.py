@@ -5,6 +5,17 @@ import matplotlib.pyplot as plt
 import cv2
 import gym
 import torchvision.utils as vutils
+import matplotlib.animation as animation
+
+def enforce_1_or_3_channels(im):
+    if im.shape[0] == 2:
+        pad = torch.zeros(1, im.shape[1], im.shape[2])
+        new_im = torch.cat((im.cpu(), pad), dim=0)
+        return new_im
+    elif im.shape[0] == 0 or im.shape[0] == 3:
+        return im
+    else:
+        raise NotImplementedError
 
 def grad_parameters(module):
     return list(filter(lambda p: p.requires_grad, module.parameters()))
@@ -29,12 +40,30 @@ def roll(tensor, shift, axis):
     after = tensor.narrow(axis, after_start, shift)
     return torch.cat([after, before], axis)
 
+def make_video_from_frames(frames, interval=30, title="animation", filename="animation.mp4", **kwargs):
+    anim_writer = animation.writers['ffmpeg'](fps=30)
+    ani_fig, ani_ax = plt.subplots()
+    ani_ax.axis('off')
+    ani_ax.set_title(title)
+    ani_fig.set_size_inches([5,5])
+    ani_im = ani_ax.imshow(frames[0],
+                           animated=True, cmap='viridis',
+                           **kwargs)
+
+    def ani_update(i):
+        ani_im.set_data(frames[i])
+        return ani_im
+
+    ani = animation.FuncAnimation(ani_fig, ani_update, len(frames), interval=interval)
+    ani.save(filename, writer=anim_writer, dpi=100)
+    plt.close(ani_fig)
+
 class ForwardHook(object):
-    def __init__(self, writer, title, initial_time):
+    def __init__(self, writer, title, initial_time, debounce_img = 150):
         self.writer = writer
         self.title = title
         self.recording_time = initial_time
-
+        self.debounce = debounce_img
 
     def write_data(self, data, comment=""):
         # if dictionary of 1 item, we use the key as comment
@@ -48,8 +77,9 @@ class ForwardHook(object):
         elif isinstance(data, torch.Tensor) and len(data.shape) == 1 and data.shape[0] == 1: # single value
             self.writer.add_scalar(self.title + comment, data, self.recording_time)
         elif isinstance(data, torch.Tensor):
-            img = vutils.make_grid(data.unsqueeze(dim=1)) # grey color channel
-            self.writer.add_image(self.title + comment, img, self.recording_time)
+            if self.recording_time % self.debounce == 0:
+                img = vutils.make_grid(data.unsqueeze(dim=1) / torch.max(data)) # grey color channel
+                self.writer.add_image(self.title + comment, img, self.recording_time)
         else:
             raise NotImplementedError
 
@@ -247,6 +277,52 @@ class AERObs(gym.ObservationWrapper):
             self.ax_full_img = self.ax_full.imshow(rgb, animated=True)
         # Update the image data for efficient live video
         self.ax_full_img.set_data(rgb)
+        plt.draw()
+        # Update the figure display immediately
+        self.fig.canvas.draw()
+
+        return self.fig
+
+class FrameResizer(gym.ObservationWrapper):
+    def __init__(self, env, shape):
+        gym.ObservationWrapper.__init__(self, env)
+        if len(env.observation_space.shape) > 2:
+            # torch is (CHW)
+            shape = (env.observation_space.shape, shape[0], shape[1])
+        else:
+            shape = (shape[0], shape[1])
+
+        self.observation_space = gym.spaces.Box(low=env.observation_space.low[0][0],
+                                                high=env.observation_space.high[0][0],
+                                                shape=shape)
+
+        self.shape = shape
+        self.last_observation = np.zeros(shape)
+
+    def observation(self, obs):
+        self.last_observation = cv2.resize(obs, self.shape)
+        return self.last_observation
+
+    def _observation(self, obs):
+        return self.observation(obs)
+
+    def render(self, mode='human', **kwargs):
+        # Create Figure for rendering
+        if not hasattr(self, 'fig'):  # initialize figure and plotting axes
+            self.fig, self.ax_full = plt.subplots()
+            if hasattr(self.env.unwrapped, 'title'):
+                self.ax_full.set_title(self.env.unwrapped.title)
+        self.ax_full.axis('off')
+
+        self.fig.show()
+        # Only create the image the first time
+        if not hasattr(self, 'ax_full_img'):
+            self.ax_full_img = self.ax_full.imshow(self.last_observation, animated=True, cmap='viridis',
+                                                   vmin = self.observation_space.low[0][0],
+                                                   vmax = self.observation_space.high[0][0]
+            )
+        # Update the image data for efficient live video
+        self.ax_full_img.set_data(self.last_observation)
         plt.draw()
         # Update the figure display immediately
         self.fig.canvas.draw()
