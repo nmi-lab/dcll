@@ -439,6 +439,12 @@ class DCLLBase(nn.Module):
         *writer*: a tensorboard writer
         *label*: label, to append the tensorboard entry
         '''
+        writer.add_histogram(self.name+'/weight',
+                             self.dclllayer.i2h.weight.flatten(),
+                             epoch)
+        writer.add_histogram(self.name+'/bias',
+                             self.dclllayer.i2h.bias.flatten(),
+                             epoch)
         if self.collect_stats:
             name = self.name+'/activation_custom_stat/'+label
             pd = np.mean(self.activity_hist,axis=0)
@@ -446,6 +452,7 @@ class DCLLBase(nn.Module):
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[0]+pd[-1]), epoch)
+
 
     def train(self, input, target):
         output, pvoutput, pv = self.forward(input)

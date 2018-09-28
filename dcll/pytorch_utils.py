@@ -101,7 +101,7 @@ class NetworkDumper(object):
         for name, param in params:
             self.writer.add_histogram(prefix+name,
                                       param.cpu().detach().numpy().flatten(),
-                                      t, bins='fd')
+                                      t)
     def weight2d(self, prefix="", t=0):
         params = self.model.named_parameters()
         # filter out all params that don't correspond to convolutions (KCHW)
@@ -137,7 +137,7 @@ class NetworkDumper(object):
         for i, (name, param) in enumerate(params):
             self.writer.add_histogram(prefix+'delta_'+name,
                                       param.cpu().detach().numpy().flatten() - self.cached[i],
-                                      t, bins='fd')
+                                      t)
 
     def start_recording(self, title="forward_data", t=0):
         hook = ForwardHook(self.writer, title, t)

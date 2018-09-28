@@ -36,12 +36,13 @@ def parse_args():
                         help='comment to name tensorboard files')
     return parser.parse_args()
 
-class ConvNetwork():
+class ConvNetwork(torch.nn.Module):
     def __init__(self, im_dims, batch_size,
                  target_size, act,
                  loss, opt, opt_param, lc_ampl,
                  alpha=[0.85, 0.9]
     ):
+        super(ConvNetwork, self).__init__()
         # format: (out_channels, kernel_size, padding, pooling)
         convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
         self.batch_size = batch_size
@@ -55,7 +56,7 @@ class ConvNetwork():
                                     lc_ampl = lc_ampl,
                                     alpharp = .65,
                                     wrp = 0,
-            ).to(device).init_hiddens(1)
+            ).to(device).init_hiddens(batch_size)
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
         n = im_dims
@@ -79,20 +80,16 @@ class ConvNetwork():
                     burnin = 50)
             )
 
-        # self.init_weights()
 
     def train(self, x, labels):
-        # x = input[iter]
-        # labels = labels1h[iter]
         spikes = x
-
         for sl in self.dcll_slices:
             spikes, _, pv = sl.train(spikes, labels)
 
     def test(self, x):
+        spikes = x
         for sl in self.dcll_slices:
-            spikes, _, _ = sl.forward(x)
-            x = spikes
+            spikes, _, _ = sl.forward(spikes)
 
     def reset(self):
         [s.init(self.batch_size, init_states = False) for s in self.dcll_slices]
@@ -118,9 +115,10 @@ if __name__ == '__main__':
     im_dims = (1, 28, 28)
     target_size = 10
 
+
     opt = optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
-    #opt = optim.SGD
+
     loss = torch.nn.SmoothL1Loss
 
     net = ConvNetwork(im_dims, args.batch_size, target_size,
@@ -144,22 +142,24 @@ if __name__ == '__main__':
     from dcll.load_mnist import *
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
 
+
     for epoch in tqdm(range(args.n_epochs)):
         input, labels = image2spiketrain(*gen_train.next())
 
         input = torch.Tensor(input).to(device).reshape(n_iters,
                                                        args.batch_size,
                                                        *im_dims)
+
         labels1h = torch.Tensor(labels).to(device)
         net.reset()
 
         # Train
         for iter in range(n_iters):
-            net.train(x = input[iter], labels=labels1h[iter])
+            net.train(x = input[iter], labels=labels1h[-1])
 
         # Test
         if (epoch % args.n_test_interval)==0:
-            input, labels1h = image2spiketrain(*gen_test.next())
+            input, labels = image2spiketrain(*gen_test.next())
             input = torch.Tensor(input).to(device).reshape(n_iters,
                                                            args.batch_size,
                                                            *im_dims)
@@ -169,8 +169,6 @@ if __name__ == '__main__':
                 net.test(x = input[iter])
 
             acc_test[epoch//args.n_test_interval, 0, :] = net.accuracy(labels1h)
-            acc_test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[epoch//args.n_test_interval, 0])])
-            print('TEST Epoch {0}:'.format(epoch) + acc_test_print)
             net.write_stats(writer, epoch)
         if not args.no_save:
             np.save(d+'/acc_test.npy', acc_test)
