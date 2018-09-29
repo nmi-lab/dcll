@@ -460,7 +460,6 @@ class DCLLBase(nn.Module):
             #self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
             loss = self.crit(pvoutput, target) #+ 4e-6*(torch.norm(pv-.5,2))
-            shape = list((self.batch_size, self.dclllayer.in_channels)+ self.dclllayer.im_dims)
             #i2h = self.dclllayer.i2h
             #loss += torch.sum(F.conv2d(torch.ones(*shape).to(device), i2h.weight*0, i2h.bias**2, i2h.stride, i2h.padding, i2h.dilation, i2h.groups)*i2h.state.ca**4)
             #print(self.crit(pvoutput, target).mean(), 1e-5*((torch.norm(pv-.5,2)).mean()))
