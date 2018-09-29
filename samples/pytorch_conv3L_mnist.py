@@ -122,7 +122,7 @@ if __name__ == '__main__':
     loss = torch.nn.SmoothL1Loss
 
     net = ConvNetwork(im_dims, args.batch_size, target_size,
-                      act=nn.ReLU(), alpha=[args.alpha, args.alphas],
+                      act=nn.Sigmoid(), alpha=[args.alpha, args.alphas],
                       loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl
     )
 
