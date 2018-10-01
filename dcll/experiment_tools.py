@@ -24,16 +24,16 @@ def annotate(d, text='', filename='notes.txt'):
 def save(directory, obj=None, filename='default.pkl'):
     import pickle
     if obj == None and filename == None:
-        f = file(directory + 'data.pickle', 'w')
+        f = open(directory + 'data.pickle', 'wb')
         pickle.dump(globaldata, f)
         f.close()
         save_source()
     elif obj == None and filename != None:
-        f = file(directory + filename, 'w')
+        f = open(directory + filename, 'wb')
         pickle.dump(globaldata, f)
         f.close()
     else:
-        f = file(directory + filename, 'w')
+        f = open(directory + filename, 'wb')
         pickle.dump(obj, f)
         f.close()
     return None
