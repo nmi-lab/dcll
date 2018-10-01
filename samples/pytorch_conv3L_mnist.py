@@ -13,7 +13,6 @@ from dcll.pytorch_libdcll import *
 from dcll.experiment_tools import *
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
 import timeit
-from tqdm import tqdm
 import pickle
 
 import argparse
@@ -148,7 +147,7 @@ def main():
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
     all_test_data = [ gen_test.next() for i in range(n_test) ]
 
-    for epoch in tqdm(range(args.n_epochs)):
+    for epoch in range(args.n_epochs):
         input, labels = image2spiketrain(*gen_train.next())
 
         input = torch.Tensor(input).to(device).reshape(n_iters,
