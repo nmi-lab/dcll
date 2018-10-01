@@ -221,7 +221,7 @@ def plot_spikes(spikes):
     '''
     return plotLIF(spikes)
 
-def plotLIF(V, spikes, Vplot = 10, staggering= 1, ax1=None, ax2=None, **kwargs):
+def plotLIF(V, spikes, Vplot = 'all', staggering= 1, ax1=None, ax2=None, **kwargs):
     '''
     This function plots the output of the function LIF.
     
@@ -230,7 +230,7 @@ def plotLIF(V, spikes, Vplot = 10, staggering= 1, ax1=None, ax2=None, **kwargs):
     *spikes*: an TxNnp.array of zeros and ones indicating spikes. This is the second
     output return by function LIF
     *Vplot*: A list indicating which neurons' membrane potentials should be 
-    plotted. If scalar, the list range(Vplot) are plotted. Default: 10
+    plotted. If scalar, the list range(Vplot) are plotted. Default: 'all'
     *staggering*: the amount by which each V trace should be shifted. None
     
     Outputs the figure returned by figure().    
@@ -248,7 +248,9 @@ def plotLIF(V, spikes, Vplot = 10, staggering= 1, ax1=None, ax2=None, **kwargs):
     ax1.set_xlim([0, spikes.shape[0]])
 
     if V is not None:
-        if not hasattr(Vplot, '__iter__'):
+        if Vplot == 'all':
+            Vplot = range(V.shape[1])
+        elif not hasattr(Vplot, '__iter__'):
             Vplot = range(np.minimum(Vplot, V.shape[1]))    
         
         if ax2 is None:
@@ -264,6 +266,9 @@ def plotLIF(V, spikes, Vplot = 10, staggering= 1, ax1=None, ax2=None, **kwargs):
             plt.yticks([])
         plt.xlabel('t [au]')
         plt.ylabel('V [au]')
+    else:
+        plt.xlabel('time [ms]')
+        plt.ylabel('Neuron ')
 
     plt.xlim([0, spikes.shape[0]])
     plt.ion()
