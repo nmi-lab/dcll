@@ -10,7 +10,7 @@
 # Licence : GPLv2
 #-----------------------------------------------------------------------------
 from dcll.pytorch_libdcll import *
-from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
+from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper, tonumpy
 import timeit
 
 def acc(pvoutput, labels):
