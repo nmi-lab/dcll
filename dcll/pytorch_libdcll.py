@@ -150,12 +150,13 @@ class CLLDenseRRPModule(CLLDenseModule):
         return output, pv
 
 class DenseDCLLlayer(nn.Module):
-    def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid()):
+    def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid(), lc_ampl=.5):
         if (target_size is None):
             target_size = out_channels
         super(DenseDCLLlayer, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.lc_ampl = lc_ampl
         self.target_size = target_size
         if wrp>0:
             self.i2h = CLLDenseRRPModule(in_channels,out_channels, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, bias = bias, act = act)
@@ -166,6 +167,18 @@ class DenseDCLLlayer(nn.Module):
         self.i2o.bias.requires_grad = False
         # self.softmax = nn.LogSoftmax(dim=1)
         self.input_size = self.out_channels
+        self.reset_lc_parameters()
+
+#    def reset_lc_parameters(self):
+#        limit = np.sqrt(100000.0 / (np.prod(self.get_flat_size()) + self.target_size))
+#        M = torch.tensor(np.random.uniform(-limit, limit, size=[np.prod(self.get_flat_size()), self.target_size])).float()
+#        self.i2o.weight.data = M.t()
+
+    def reset_lc_parameters(self):
+        stdv = self.lc_ampl / math.sqrt(self.i2o.weight.size(1))
+        self.i2o.weight.data.uniform_(-stdv, stdv)
+        if self.i2o.bias is not None:
+            self.i2o.bias.data.uniform_(-stdv, stdv)
 
     def forward(self, input):
         input   = input.view(-1,self.in_channels)
@@ -515,6 +528,12 @@ class DCLLBase(nn.Module):
         *writer*: a tensorboard writer
         *label*: label, to append the tensorboard entry
         '''
+        writer.add_histogram(self.name+'/weight',
+                             self.dclllayer.i2h.weight.flatten(),
+                             epoch)
+        writer.add_histogram(self.name+'/bias',
+                             self.dclllayer.i2h.bias.flatten(),
+                             epoch)
         if self.collect_stats:
             pd = np.mean(self.activity_hist,axis=0)
             pd = pd /pd.sum()
@@ -531,13 +550,13 @@ class DCLLBase(nn.Module):
              
             print(self.name + " low:{0:1.3} high:{1:1.3}".format(pd[0],pd[-1]))
 
+
     def train(self, input, target):
         output, pvoutput, pv, pvmem = self.forward(input)
         if self.iter>=self.burnin:
             #self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
             loss = self.crit(pvoutput, target) #+ 4e-6*(torch.norm(pv-.5,2))
-            shape = list((self.batch_size, self.dclllayer.in_channels)+ self.dclllayer.im_dims)
             #i2h = self.dclllayer.i2h
             #loss += torch.sum(F.conv2d(torch.ones(*shape).to(device), i2h.weight*0, i2h.bias**2, i2h.stride, i2h.padding, i2h.dilation, i2h.groups)*i2h.state.ca**4)
             #print(self.crit(pvoutput, target).mean(), 1e-5*((torch.norm(pv-.5,2)).mean()))

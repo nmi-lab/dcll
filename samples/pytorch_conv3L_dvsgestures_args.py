@@ -8,7 +8,7 @@
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 from dcll.pytorch_libdcll import *
 from dcll.experiment_tools import *
 from dcll.load_dvsgestures_sparse import *
@@ -35,8 +35,8 @@ args = parser.parse_args()
 #args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 
-torch.manual_seed(0)
-np.random.seed(0)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
 
 #Method for computing classification accuracy
 acc = accuracy_by_vote
@@ -326,7 +326,4 @@ if __name__ == "__main__":
 
 
             
-
-            #[writer.add_scalar('train/acc/layer{0}'.format(i), acc_train[-1][i], epoch) for i in range(len(dcll_slices))]
-            #[writer.add_scalar('test/acc/layer{0}'.format(i), acc_test[-1][i], epoch) for i in range(len(dcll_slices))]
 

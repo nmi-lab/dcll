@@ -12,190 +12,181 @@
 from dcll.pytorch_libdcll import *
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper, tonumpy
 import timeit
+import pickle
+import numpy as np
 
-def acc(pvoutput, labels):
-    return float(torch.mean((pvoutput.argmax(1) == labels.argmax(1)).float()))
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
+    parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
+    parser.add_argument('--n_epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
+    parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
+    #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
+    parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed (default: 0)')
+    parser.add_argument('--n_test_interval', type=int, default=20, metavar='N', help='how many epochs to run before testing')
+    parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
+    parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
+    parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
+    parser.add_argument('--beta', type=float, default=.95, metavar='N', help='Beta2 parameters for Adamax')
+    parser.add_argument('--lc_ampl', type=float, default=.5, metavar='N', help='magnitude of local classifier init')
+    parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
+    parser.add_argument('--comment', type=str, default='',
+                        help='comment to name tensorboard files')
+    parser.add_argument('--output', type=str, default='Results/',
+                        help='folder name for the results')
+    return parser.parse_args()
 
 class ConvNetwork(torch.nn.Module):
     def __init__(self, im_dims, batch_size,
-                 target_size, out_channels_1, out_channels_2, out_channels_3):
+                 target_size, act,
+                 loss, opt, opt_param, lc_ampl,
+                 alpha=[0.85, 0.9]
+    ):
         super(ConvNetwork, self).__init__()
-        self.layer1 = Conv2dDCLLlayer(in_channels, out_channels = out_channels_1,
-                                      im_dims=im_dims, target_size=target_size,
-                                      pooling=2, padding=3, kernel_size=7,
-                                      act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
-        o_shape = self.layer1.output_shape
-        self.layer2 = Conv2dDCLLlayer(out_channels_1, out_channels = out_channels_2,
-                                      im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
-                                      pooling=2, padding=3, kernel_size=7,
-                                      act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
-        o_shape = self.layer2.output_shape
-        self.layer3 = Conv2dDCLLlayer(out_channels_2, out_channels = out_channels_3,
-                                      im_dims=(o_shape[1], o_shape[2]), target_size=target_size,
-                                      pooling=1, padding=3, kernel_size=7,
-                                      act = torch.nn.ReLU()).to(device).init_hiddens(batch_size)
-        self.init_weights()
+        # format: (out_channels, kernel_size, padding, pooling)
+        convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
+        self.batch_size = batch_size
 
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, Conv2dDCLLlayer):
-                param = None
-                if isinstance(m.i2h.act, torch.nn.ReLU):
-                    act = 'relu'
-                elif isinstance(m.i2h.act, torch.nn.LeakyReLU) or isinstance(m.i2h.act, torch.nn.ELU):
-                    act = 'leaky_relu'
-                    param = self.negative_slope
-                elif isinstance(m.i2h.act, torch.nn.ReLU):
-                    act = 'relu'
-                else:
-                    act = 'tanh'
-                gain = torch.nn.init.calculate_gain(act, param) * 0.1
-                m.i2h.bias.data.mul_(gain)
-                torch.nn.init.xavier_normal_(m.i2h.weight, gain=gain)
-                torch.nn.init.xavier_normal_(m.i2o.weight, gain=gain)
+        def make_conv(inp, conf):
+            layer = Conv2dDCLLlayer(in_channels = inp[0], out_channels = conf[0],
+                                    kernel_size=conf[1], padding=conf[2], pooling=conf[3],
+                                    im_dims=inp[1:3], # height, width
+                                    target_size=target_size,
+                                    alpha=alpha[0], alphas=alpha[1], act = act,
+                                    lc_ampl = lc_ampl,
+                                    alpharp = .65,
+                                    wrp = 0,
+            ).to(device).init_hiddens(batch_size)
+            return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
-    def init_weights_from_batches(self, batches, var_tolerance = 0.01, tmax = 30):
-        with torch.no_grad():
-            spiketrains = batches
-            for layer in [ self.layer1, self.layer2, self.layer3 ]:
-                t = 0
-                out = torch.stack( [ layer.forward(spike_img)[1] for spike_img in spiketrains ] )
-                while torch.abs(torch.var(out) - 1.).item() > var_tolerance and t < tmax:
-                    t += 1
-                    layer.i2h.weight.data.mul_(1. / torch.std(out))
-                    layer.i2h.bias.data.mul_(1. / torch.std(out))
-                    out = torch.stack( [ layer.forward(spike_img)[1] for spike_img in spiketrains ] )
-                print('out after {} with variance {}'.format(t, torch.var(out)))
-                spiketrains = torch.stack( [ layer.forward(spike_img)[0] for spike_img in spiketrains ] )
+        n = im_dims
+
+        self.layer1, n = make_conv(n, convs[0])
+        self.layer2, n = make_conv(n, convs[1])
+        self.layer3, n = make_conv(n, convs[2])
+
+        self.dcll_slices = []
+        for layer, name in zip([self.layer1, self.layer2, self.layer3],
+                               ['conv1', 'conv2', 'conv3']):
+            self.dcll_slices.append(
+                DCLLClassification(
+                    dclllayer = layer,
+                    name = name,
+                    batch_size = batch_size,
+                    loss = loss,
+                    optimizer = opt,
+                    kwargs_optimizer = opt_param,
+                    collect_stats = True,
+                    burnin = 50)
+            )
 
 
-    def zero_grad(self):
-        self.layer1.zero_grad()
-        self.layer2.zero_grad()
-        self.layer3.zero_grad()
+    def train(self, x, labels):
+        spikes = x
+        for sl in self.dcll_slices:
+            spikes, _, pv = sl.train(spikes, labels)
 
-    def forward(self, x):
-        output1, pvoutput1, _ = self.layer1.forward(x)
-        output2, pvoutput2, _ = self.layer2.forward(output1)
-        output3, pvoutput3, _ = self.layer3.forward(output2)
-        return (output1, output2, output3), (pvoutput1, pvoutput2, pvoutput3)
+    def test(self, x):
+        spikes = x
+        for sl in self.dcll_slices:
+            spikes, _, _ = sl.forward(spikes)
+
+    def reset(self):
+        [s.init(self.batch_size, init_states = False) for s in self.dcll_slices]
+    def write_stats(self, writer, epoch, comment=""):
+        [s.write_stats(writer, label = 'test'+comment+'/', epoch = epoch) for s in self.dcll_slices]
+
+    def accuracy(self, labels):
+        return [ s.accuracy(labels) for s in self.dcll_slices]
 
 
-if __name__ == '__main__':
-    from tensorboardX import SummaryWriter
-    writer = SummaryWriter(comment='MNIST Conv')
+if __name__ == "__main__":
+    args = parse_args()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
-    torch.manual_seed(0)
-    np.random.seed(0)
+    import datetime,socket,os
+    current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
+    log_dir = os.path.join('runs/', 'pytorch_conv3L_mnist_', current_time + '_' + socket.gethostname() +'_' + args.comment, )
+    print(log_dir)
 
-    n_epochs=200
     n_iters = 500
-    in_channels = 1
-    out_channels_1 = 32//2
-    out_channels_2 = 48//2
-    out_channels_3 = 64//2
-    im_dims = (28, 28)
-    batch_size = 64
+    n_iters_test = 2000
+    im_dims = (1, 28, 28)
     target_size = 10
+    # number of test samples: n_test * batch_size
+    n_test = 10
 
-    net = ConvNetwork(im_dims, batch_size, target_size, out_channels_1, out_channels_2, out_channels_3)
+    opt = torch.optim.Adamax
+    opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
+
+    loss = torch.nn.SmoothL1Loss
+
+    net = ConvNetwork(im_dims, args.batch_size, target_size,
+                      act=torch.nn.Sigmoid(), alpha=[args.alpha, args.alphas],
+                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl
+    )
+
+    from tensorboardX import SummaryWriter
+    writer = SummaryWriter(log_dir = log_dir, comment='MNIST Conv')
     dumper = NetworkDumper(writer, net)
 
-    criterion = nn.MSELoss().to(device)
-    optimizer = optim.SGD(grad_parameters(net), lr=5e-5)
+    if not args.no_save:
+        d = mksavedir(pre=args.output)
+        annotate(d, text = log_dir, filename= 'log_filename')
+        annotate(d, text = str(args), filename= 'args')
+        save_source(d)
 
-    avg_loss1 = 0
-    avg_loss2 = 0
-    avg_loss3 = 0
+    n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
+    acc_test = np.empty([n_tests_total, n_test, len(net.dcll_slices)])
 
     from dcll.load_mnist import *
-    gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = batch_size)
+    gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
+    all_test_data = [ gen_test.next() for i in range(n_test) ]
 
-    for epoch in range(n_epochs):
-        input, labels1h = image2spiketrain(*gen_train.next())
+    for epoch in range(args.n_epochs):
+        input, labels = image2spiketrain(*gen_train.next())
 
         input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                       batch_size,
-                                                       in_channels,
+                                                       args.batch_size,
                                                        *im_dims)
-        if epoch == 0:
-            # initialize network weight with respect to the first batch
-            # Method described in "ALL YOU NEED IS A GOOD INIT", ICLR 2016
-            net.init_weights_from_batches(input[0:200], var_tolerance = 1e-3)
 
+        labels1h = torch.Tensor(labels).to(device)
+        net.reset()
 
-        labels1h = torch.Tensor(labels1h).to(device)
-
+        # Train
         for iter in range(n_iters):
-            if iter>150:
-                optimizer.zero_grad()
-                net.zero_grad()
+            net.train(x = input[iter], labels=labels1h[-1])
 
-            spikes, pvs = net.forward(input[iter])
+        # Test
+        if (epoch % args.n_test_interval)==0:
+            net.reset()
+            for i, test_data in enumerate(all_test_data):
+                test_input, test_labels = image2spiketrain(*test_data)
+                test_input = torch.Tensor(test_input).to(device).reshape(n_iters,
+                                                                         args.batch_size,
+                                                                         *im_dims)
+                test_labels1h = torch.Tensor(test_labels).to(device)
 
-            if iter>150:
-                losses1 = criterion(pvs[0], labels1h[-1])
-                losses2 = criterion(pvs[1], labels1h[-1])
-                losses3 = criterion(pvs[2], labels1h[-1])
+                for iter in range(n_iters):
+                    net.test(x = input[iter])
 
-                avg_loss1 += losses1.item()
-                avg_loss2 += losses2.item()
-                avg_loss3 += losses3.item()
+                acc_test[epoch//args.n_test_interval, i, :] = net.accuracy(labels1h)
+                if i == 0:
+                    net.write_stats(writer, epoch, comment='_batch_'+str(i))
+            if not args.no_save:
+                np.save(d+'/acc_test.npy', acc_test)
+                annotate(d, text = "", filename = "best result")
+                parameter_dict = {
+                    name: data.detach().cpu().numpy()
+                    for (name, data) in net.named_parameters()
+                }
+                with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
+                    pickle.dump(parameter_dict, f)
+            print("Epoch {} \t Accuracy {}".format(epoch, acc_test[epoch//args.n_test_interval, 0, -1]))
 
-                losses1.backward()
-                losses2.backward()
-                losses3.backward()
 
-                optimizer.step()
 
-        writer.add_scalar('train/loss/layer1', avg_loss1 / n_iters, epoch)
-        writer.add_scalar('train/loss/layer2', avg_loss2 / n_iters, epoch)
-        writer.add_scalar('train/loss/layer3', avg_loss3 / n_iters, epoch)
-        avg_loss1 = 0
-        avg_loss2 = 0
-        avg_loss3 = 0
-
-        #print("Step time: {0}".format(time.time()-t0))
-        print('TRAIN Epoch {0}: Acc1 {1:1.3} Acc2 {2:1.3} Acc3 {3:1.3}'.format(epoch, acc(pvs[0],labels1h[-1]), acc(pvs[1], labels1h[-1]), acc(pvs[2], labels1h[-1])))
-
-        input, labels1h = image2spiketrain(*gen_test.next())
-        input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                       batch_size,
-                                                       in_channels,
-                                                       *im_dims)
-        labels1h = torch.Tensor(labels1h).to(device)
-
-        for iter in range(n_iters-100):
-            spikes, pvs = net.forward(input[iter])
-
-            losses1 = criterion(pvs[0], labels1h[-1])
-            losses2 = criterion(pvs[1], labels1h[-1])
-            losses3 = criterion(pvs[2], labels1h[-1])
-
-            avg_loss1 += losses1.item()
-            avg_loss2 += losses2.item()
-            avg_loss3 += losses3.item()
-
-        avg_loss1 /= n_iters
-        avg_loss2 /= n_iters
-        avg_loss3 /= n_iters
-
-        acc1 = acc(pvs[0], labels1h[-1])
-        acc2 = acc(pvs[1], labels1h[-1])
-        acc3 = acc(pvs[2], labels1h[-1])
-
-        writer.add_scalar('test/loss/layer1', avg_loss1, epoch)
-        writer.add_scalar('test/loss/layer2', avg_loss2, epoch)
-        writer.add_scalar('test/loss/layer3', avg_loss3, epoch)
-
-        writer.add_scalar('test/acc/layer1', acc1, epoch)
-        writer.add_scalar('test/acc/layer2', acc2, epoch)
-        writer.add_scalar('test/acc/layer3', acc3, epoch)
-
-        dumper.histogram(t=epoch)
-
-        print('Test Epoch {0}: L1 {1:1.3} L2 {2:1.3} L3{3:1.3} Acc1 {4:1.3} Acc2 {5:1.3} Acc3 {6:1.3}'.format(epoch, avg_loss1, avg_loss2, avg_loss3, acc1, acc2, acc3))
-
-        #a = np.array(states1)
-        #b = np.array(states2)
     writer.close()
