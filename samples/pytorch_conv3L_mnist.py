@@ -9,11 +9,13 @@
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
 #-----------------------------------------------------------------------------
-from dcll.pytorch_libdcll import *
-from dcll.experiment_tools import *
+import torch
+from dcll.pytorch_libdcll import Conv2dDCLLlayer, device, DCLLClassification
+from dcll.experiment_tools import mksavedir, save_source, annotate
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
 import timeit
 import pickle
+import numpy as np
 
 import argparse
 
@@ -34,7 +36,7 @@ def parse_args():
     parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
     parser.add_argument('--comment', type=str, default='',
                         help='comment to name tensorboard files')
-    parser.add_argument('--output', type=str, default=None,
+    parser.add_argument('--output', type=str, default='Results/',
                         help='folder name for the results')
     return parser.parse_args()
 
@@ -102,7 +104,7 @@ class ConvNetwork(torch.nn.Module):
         return [ s.accuracy(labels) for s in self.dcll_slices]
 
 
-def main():
+if __name__ == "__main__":
     args = parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -112,7 +114,6 @@ def main():
     log_dir = os.path.join('runs/', 'pytorch_conv3L_mnist_', current_time + '_' + socket.gethostname() +'_' + args.comment, )
     print(log_dir)
 
-
     n_iters = 500
     n_iters_test = 2000
     im_dims = (1, 28, 28)
@@ -120,13 +121,13 @@ def main():
     # number of test samples: n_test * batch_size
     n_test = 10
 
-    opt = optim.Adamax
+    opt = torch.optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
 
     loss = torch.nn.SmoothL1Loss
 
     net = ConvNetwork(im_dims, args.batch_size, target_size,
-                      act=nn.Sigmoid(), alpha=[args.alpha, args.alphas],
+                      act=torch.nn.Sigmoid(), alpha=[args.alpha, args.alphas],
                       loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl
     )
 
@@ -186,12 +187,8 @@ def main():
                 }
                 with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
                     pickle.dump(parameter_dict, f)
+            print("Epoch {} \t Accuracy {}".format(epoch, acc_test[epoch//args.n_test_interval, 0, -1]))
 
 
 
     writer.close()
-
-
-if __name__ == "__main__":
-    # execute only if run as a script
-    main()
