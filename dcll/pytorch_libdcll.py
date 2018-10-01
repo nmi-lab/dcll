@@ -439,6 +439,12 @@ class DCLLBase(nn.Module):
         *writer*: a tensorboard writer
         *label*: label, to append the tensorboard entry
         '''
+        writer.add_histogram(self.name+'/weight',
+                             self.dclllayer.i2h.weight.flatten(),
+                             epoch)
+        writer.add_histogram(self.name+'/bias',
+                             self.dclllayer.i2h.bias.flatten(),
+                             epoch)
         if self.collect_stats:
             name = self.name+'/activation_custom_stat/'+label
             pd = np.mean(self.activity_hist,axis=0)
@@ -447,13 +453,13 @@ class DCLLBase(nn.Module):
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[0]+pd[-1]), epoch)
 
+
     def train(self, input, target):
         output, pvoutput, pv = self.forward(input)
         if self.iter>=self.burnin:
             #self.optimizer.zero_grad()
             self.dclllayer.zero_grad()
             loss = self.crit(pvoutput, target) #+ 4e-6*(torch.norm(pv-.5,2))
-            shape = list((self.batch_size, self.dclllayer.in_channels)+ self.dclllayer.im_dims)
             #i2h = self.dclllayer.i2h
             #loss += torch.sum(F.conv2d(torch.ones(*shape).to(device), i2h.weight*0, i2h.bias**2, i2h.stride, i2h.padding, i2h.dilation, i2h.groups)*i2h.state.ca**4)
             #print(self.crit(pvoutput, target).mean(), 1e-5*((torch.norm(pv-.5,2)).mean()))
