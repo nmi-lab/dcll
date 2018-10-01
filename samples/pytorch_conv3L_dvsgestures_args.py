@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : Tue 11 Sep 2018 09:33:40 AM PDT
+# Last Modified : Mon 01 Oct 2018 04:48:59 PM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
@@ -21,6 +21,7 @@ parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='numbe
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
+parser.add_argument('--netscale', type=float, default=1, metavar='N', help='adjust the network size')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
 parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
@@ -51,12 +52,12 @@ dt = 1000 #us
 in_channels = 2
 ds = 4
 im_dims = im_width, im_height = (128//ds, 128//ds)
-out_channels_1 = 128
-out_channels_2 = 256
-out_channels_3 = 256
-out_channels_4 = 512
-out_channels_5 = 1024
-out_channels_6 = 1024
+out_channels_1 = int(128*args.netscale)
+out_channels_2 = int(256*args.netscale)
+out_channels_3 = int(256*args.netscale)
+out_channels_4 = int(512*args.netscale)
+out_channels_5 = int(1024*args.netscale)
+out_channels_6 = int(1024*args.netscale)
 target_size = 11
 act=nn.Sigmoid()
                 
@@ -285,6 +286,8 @@ if __name__ == "__main__":
             if not args.no_save:
                 np.save(d+'/acc_test.npy', acc_test)
                 annotate(d, text = "", filename = "best result")
+                save_dcllslices(d, dcll_slices)
+                save(d, args, filename = '/args.pkl')
 
     else:
         from tqdm import tqdm
