@@ -51,7 +51,7 @@ class SequenceGenerator(object):
     def reset(self):
         self.i = 0
 
-    def next(self):
+    def next(self, offset = 0):
         if self.group != 'test':
             dat,lab = next(
                     self.grp1,
@@ -69,7 +69,8 @@ class SequenceGenerator(object):
                     n_classes = self.num_classes,
                     size = self.size,
                     ds = self.ds,
-                    dt = self.dt)
+                    dt = self.dt,
+                    offset = offset)
 
         return dat, lab
 
@@ -191,7 +192,7 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
     #print(batch_idx_l)
     return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
 
-def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000):
+def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000, offset = 0):
     batch_1of_each = {k:range(len(v['labels'].value)) for k,v in hdf5_group.items()}
     batch_size = np.sum([len(v) for v in batch_1of_each.values()])
     batch = np.empty([batch_size,T]+size, dtype='float')
@@ -203,7 +204,7 @@ def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64]
             labels = dset['labels'].value
             label = labels[l0,0]
             batch_idx_l[i] = label-1
-            start_time = labels[l0,1]
+            start_time = labels[l0,1] + offset*dt
             #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
             batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
             i += 1
@@ -225,9 +226,9 @@ def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 
 
 def create_events_hdf5():
     fns_train = gather_aedat('/share/data/DvsGesture/aedat/',1,24)
-    fns_test = gather_aedat('/share/data/DvsGesture/aedat/',25,30)
+    fns_test = gather_aedat('/share/data/DvsGesture/aedat/',24,30)
 
-    with h5py.File('samples/data/dvs_gestures_events.hdf5', 'w') as f:
+    with h5py.File('data/dvs_gestures_events.hdf5', 'w') as f:
         f.clear()
 
         print("processing training data...")
@@ -264,29 +265,38 @@ def create_events_hdf5():
         f.create_dataset('stats',stats.shape, dtype = stats.dtype)
         f['stats'][:] = stats
     
-
-
-
 def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
     strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
     stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
     return strain, stest
 
-def plot_gestures_imshow(images, labels, nim=11, avg=50):
+def plot_gestures_imshow(images, labels, nim=11, avg=50, do1h = True, transpose=False):
     import pylab as plt
-    plt.figure(figsize = [nim+2,6])
+    plt.figure(figsize = [nim+2,16])
     import matplotlib.gridspec as gridspec
-    gs = gridspec.GridSpec(images.shape[1]//avg, nim)
+    if not transpose:
+        gs = gridspec.GridSpec(images.shape[1]//avg, nim)
+    else:
+        gs = gridspec.GridSpec(nim, images.shape[1]//avg)
     plt.subplots_adjust(left=0, bottom=0, right=1, top=0.95, wspace=.0, hspace=.04)
-    categories = labels.argmax(axis=1)
+    if do1h:
+        categories = labels.argmax(axis=1)
+    else:
+        categories = labels
+    s=[]
     for j in range(nim):
          for i in range(images.shape[1]//avg):
-             ax = plt.subplot(gs[i, j])
+             if not transpose:
+                 ax = plt.subplot(gs[i, j])
+             else:
+                 ax = plt.subplot(gs[j, i])
              plt.imshow(images[j,i*avg:(i*avg+avg),0,:,:].sum(axis=0).T)
              plt.xticks([])
              if i==0:  plt.title(mapping[labels[0,j].argmax()], fontsize=10)
              plt.yticks([])
              plt.gray()
+         s.append(images[j].sum())
+    print(s)
     #return images,labels
 
 
