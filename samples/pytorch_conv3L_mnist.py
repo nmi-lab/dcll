@@ -14,6 +14,7 @@ from dcll.experiment_tools import *
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper
 import timeit
 from tqdm import tqdm
+import pickle
 
 import argparse
 
@@ -34,6 +35,8 @@ def parse_args():
     parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
     parser.add_argument('--comment', type=str, default='',
                         help='comment to name tensorboard files')
+    parser.add_argument('--output', type=str, default=None,
+                        help='folder name for the results')
     return parser.parse_args()
 
 class ConvNetwork(torch.nn.Module):
@@ -93,14 +96,14 @@ class ConvNetwork(torch.nn.Module):
 
     def reset(self):
         [s.init(self.batch_size, init_states = False) for s in self.dcll_slices]
-    def write_stats(self, writer, epoch):
-        [s.write_stats(writer, label = 'test/', epoch = epoch) for s in self.dcll_slices]
+    def write_stats(self, writer, epoch, comment=""):
+        [s.write_stats(writer, label = 'test'+comment+'/', epoch = epoch) for s in self.dcll_slices]
 
     def accuracy(self, labels):
         return [ s.accuracy(labels) for s in self.dcll_slices]
 
 
-if __name__ == '__main__':
+def main():
     args = parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -112,9 +115,11 @@ if __name__ == '__main__':
 
 
     n_iters = 500
+    n_iters_test = 2000
     im_dims = (1, 28, 28)
     target_size = 10
-
+    # number of test samples: n_test * batch_size
+    n_test = 10
 
     opt = optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
@@ -131,17 +136,17 @@ if __name__ == '__main__':
     dumper = NetworkDumper(writer, net)
 
     if not args.no_save:
-        d = mksavedir()
+        d = mksavedir(pre=args.output)
         annotate(d, text = log_dir, filename= 'log_filename')
         annotate(d, text = str(args), filename= 'args')
         save_source(d)
 
     n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
-    acc_test = np.empty([n_tests_total, 1, len(net.dcll_slices)])
+    acc_test = np.empty([n_tests_total, n_test, len(net.dcll_slices)])
 
     from dcll.load_mnist import *
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
-
+    all_test_data = [ gen_test.next() for i in range(n_test) ]
 
     for epoch in tqdm(range(args.n_epochs)):
         input, labels = image2spiketrain(*gen_train.next())
@@ -159,20 +164,35 @@ if __name__ == '__main__':
 
         # Test
         if (epoch % args.n_test_interval)==0:
-            input, labels = image2spiketrain(*gen_test.next())
-            input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                           args.batch_size,
-                                                           *im_dims)
-            labels1h = torch.Tensor(labels).to(device)
             net.reset()
-            for iter in range(n_iters):
-                net.test(x = input[iter])
+            for i, test_data in enumerate(all_test_data):
+                test_input, test_labels = image2spiketrain(*test_data)
+                test_input = torch.Tensor(test_input).to(device).reshape(n_iters,
+                                                                         args.batch_size,
+                                                                         *im_dims)
+                test_labels1h = torch.Tensor(test_labels).to(device)
 
-            acc_test[epoch//args.n_test_interval, 0, :] = net.accuracy(labels1h)
-            net.write_stats(writer, epoch)
-        if not args.no_save:
-            np.save(d+'/acc_test.npy', acc_test)
-            annotate(d, text = "", filename = "best result")
+                for iter in range(n_iters):
+                    net.test(x = input[iter])
+
+                acc_test[epoch//args.n_test_interval, i, :] = net.accuracy(labels1h)
+                if i == 0:
+                    net.write_stats(writer, epoch, comment='_batch_'+str(i))
+            if not args.no_save:
+                np.save(d+'/acc_test.npy', acc_test)
+                annotate(d, text = "", filename = "best result")
+                parameter_dict = {
+                    name: data.detach().cpu().numpy()
+                    for (name, data) in net.named_parameters()
+                }
+                with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
+                    pickle.dump(parameter_dict, f)
+
 
 
     writer.close()
+
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
