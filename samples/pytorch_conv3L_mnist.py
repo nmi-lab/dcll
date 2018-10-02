@@ -28,6 +28,7 @@ def parse_args():
     #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed (default: 0)')
     parser.add_argument('--n_test_interval', type=int, default=20, metavar='N', help='how many epochs to run before testing')
+    parser.add_argument('--n_test_samples', type=int, default=1000, metavar='N', help='how many test samples to use')
     parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
     parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
     parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
@@ -129,7 +130,7 @@ if __name__ == "__main__":
     im_dims = (1, 28, 28)
     target_size = 10
     # number of test samples: n_test * batch_size
-    n_test = 10
+    n_test = np.ceil(float(args.n_test_samples)/args.batch_size).astype(int)
 
     opt = torch.optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
