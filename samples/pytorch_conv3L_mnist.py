@@ -43,8 +43,7 @@ def parse_args():
     return parser.parse_args()
 
 class ReferenceConvNetwork(torch.nn.Module):
-    def __init__(self, im_dims, convs,
-                 loss, opt, opt_param,
+    def __init__(self, im_dims, convs, loss
     ):
         super(ReferenceConvNetwork, self).__init__()
 
@@ -66,7 +65,7 @@ class ReferenceConvNetwork(torch.nn.Module):
         self.layer3, n = make_conv(n, convs[2])
         self.linear = torch.nn.Linear(32 * 7 * 7, 10).to(device)
 
-        self.optim = opt(self.parameters(), **opt_param)
+        self.optim = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.5)
         self.crit = loss().to(device)
 
     def forward(self, x):
@@ -78,6 +77,8 @@ class ReferenceConvNetwork(torch.nn.Module):
 
     def train(self, x, labels):
         y = self.forward(x)
+
+        self.optim.zero_grad()
         loss = self.crit(y, labels)
         loss.backward()
         self.optim.step()
@@ -194,7 +195,7 @@ if __name__ == "__main__":
                       skip_first=args.skip_first
     )
 
-    ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
+    ref_net = ReferenceConvNetwork(im_dims, convs, loss)
 
     from tensorboardX import SummaryWriter
     writer = SummaryWriter(log_dir = log_dir, comment='MNIST Conv')
@@ -203,7 +204,7 @@ if __name__ == "__main__":
     if not args.no_save:
         d = mksavedir(pre=args.output)
         annotate(d, text = log_dir, filename= 'log_filename')
-        annotate(d, text = str(args), filename= 'args.pkl')
+        annotate(d, text = str(args), filename= 'args')
         save_source(d)
 
     n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
