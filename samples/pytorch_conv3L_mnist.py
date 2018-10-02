@@ -28,7 +28,7 @@ def parse_args():
     #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
     parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed (default: 0)')
     parser.add_argument('--n_test_interval', type=int, default=20, metavar='N', help='how many epochs to run before testing')
-    parser.add_argument('--n_test_samples', type=int, default=1000, metavar='N', help='how many test samples to use')
+    parser.add_argument('--n_test_samples', type=int, default=1500, metavar='N', help='how many test samples to use')
     parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
     parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
     parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
