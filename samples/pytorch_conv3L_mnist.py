@@ -9,7 +9,9 @@
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
 #-----------------------------------------------------------------------------
-from dcll.pytorch_libdcll import *
+import torch
+from dcll.pytorch_libdcll import Conv2dDCLLlayer, device, DCLLClassification
+from dcll.experiment_tools import mksavedir, save_source, annotate
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper, tonumpy
 import timeit
 import pickle
@@ -94,14 +96,14 @@ class ConvNetwork(torch.nn.Module):
         for i, sl in enumerate(self.dcll_slices):
             if self.skip_first and i==0:
                 # if skip first is on we don't train the first layer
-                spikes, _, pv = sl.forward(spikes)
+                spikes, _, pv, _ = sl.forward(spikes)
             else:
-                spikes, _, pv = sl.train(spikes, labels)
+                spikes, _, pv, _ = sl.train(spikes, labels)
 
     def test(self, x):
         spikes = x
         for sl in self.dcll_slices:
-            spikes, _, _ = sl.forward(spikes)
+            spikes, _, _, _ = sl.forward(spikes)
 
     def reset(self):
         [s.init(self.batch_size, init_states = False) for s in self.dcll_slices]

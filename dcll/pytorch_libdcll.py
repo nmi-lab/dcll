@@ -335,7 +335,7 @@ class ContinuousRefractoryConv2D(ContinuousConv2D):
         self.state.arp[self.state.arp<0] += 1
         pvmem = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups) - 1000000*(self.state.arp<0).float()
         output = (pvmem>0).float()
-        arp = self.state.arp - output*self.arp 
+        arp = self.state.arp - output*self.arp
         pv = self.act(pvmem)
 
         ##best
@@ -542,12 +542,12 @@ class DCLLBase(nn.Module):
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[0]), epoch)
-            
+
             name = self.name+'/'+'/high_pv/'+label
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[-1]), epoch)
-             
+
             print(self.name + " low:{0:1.3} high:{1:1.3}".format(pd[0],pd[-1]))
 
 
@@ -569,7 +569,7 @@ class DCLLBase(nn.Module):
             #        else:
             #            wz4 = F.conv_transpose2d(p.data*self.dclllayer.i2h.state.ca**4
             #            p.data = p.data.add(p.data,-self.optimizer.param_groups[0]['lr']*)
-                    
+
         return output, pvoutput, pv, pvmem
 
 class DCLLClassification(DCLLBase):
