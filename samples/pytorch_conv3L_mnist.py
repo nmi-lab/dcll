@@ -42,15 +42,63 @@ def parse_args():
     parser.add_argument('--skip_first', type=bool, default=False, metavar='N', help='do not train first layer')
     return parser.parse_args()
 
+class ReferenceConvNetwork(torch.nn.Module):
+    def __init__(self, im_dims, convs,
+                 loss, opt, opt_param,
+    ):
+        super(ReferenceConvNetwork, self).__init__()
+
+        def make_conv(inp, conf):
+            layer = torch.nn.Sequential(
+                torch.nn.Conv2d(in_channels=inp[0],
+                                out_channels=conf[0],
+                                kernel_size=conf[1],
+                                padding=conf[2]),
+                torch.nn.ReLU(),
+                torch.nn.MaxPool2d(kernel_size=conf[3], stride=conf[3], padding=(conf[3]-1)//2)
+            )
+            layer = layer.to(device)
+            return (layer, [conf[0]])
+
+        n = im_dims
+        self.layer1, n = make_conv(n, convs[0])
+        self.layer2, n = make_conv(n, convs[1])
+        self.layer3, n = make_conv(n, convs[2])
+        self.linear = torch.nn.Linear(32 * 7 * 7, 10).to(device)
+
+        self.optim = opt(self.parameters(), **opt_param)
+        self.crit = loss().to(device)
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.linear(x.view(x.shape[0], -1))
+        return x
+
+    def train(self, x, labels):
+        y = self.forward(x)
+        loss = self.crit(y, labels)
+        loss.backward()
+        self.optim.step()
+
+    def test(self, x):
+        self.y_test = self.forward(x.detach())
+
+    def write_stats(self, writer, epoch):
+        writer.add_scalar('acc/ref_net', self.acc, epoch)
+
+    def accuracy(self, labels):
+        self.acc = torch.mean((self.y_test.argmax(1) == labels.argmax(1)).float()).item()
+        return self.acc
+
 class ConvNetwork(torch.nn.Module):
-    def __init__(self, im_dims, batch_size,
+    def __init__(self, im_dims, batch_size, convs,
                  target_size, act,
                  loss, opt, opt_param, lc_ampl,
                  alpha=[0.85, 0.9], skip_first=False
     ):
         super(ConvNetwork, self).__init__()
-        # format: (out_channels, kernel_size, padding, pooling)
-        convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
         self.batch_size = batch_size
         self.skip_first = skip_first
 
@@ -72,9 +120,9 @@ class ConvNetwork(torch.nn.Module):
         self.layer2, n = make_conv(n, convs[1])
         self.layer3, n = make_conv(n, convs[2])
 
-        if self.skip_first:
-            # scale up the first layer weights if we don't train it
-            self.layer1.i2h.weight.data.mul_(100.)
+        # scale up the first layer weights
+        # required if we don't train it, otherwise not enough spikes pass through
+        self.layer1.i2h.weight.data.mul_(100.)
 
         self.dcll_slices = []
         for layer, name in zip([self.layer1, self.layer2, self.layer3],
@@ -137,11 +185,16 @@ if __name__ == "__main__":
 
     loss = torch.nn.SmoothL1Loss
 
-    net = ConvNetwork(im_dims, args.batch_size, target_size,
+    # format: (out_channels, kernel_size, padding, pooling)
+    convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
+
+    net = ConvNetwork(im_dims, args.batch_size, convs, target_size,
                       act=torch.nn.Sigmoid(), alpha=[args.alpha, args.alphas],
                       loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl,
                       skip_first=args.skip_first
     )
+
+    ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
 
     from tensorboardX import SummaryWriter
     writer = SummaryWriter(log_dir = log_dir, comment='MNIST Conv')
@@ -155,24 +208,29 @@ if __name__ == "__main__":
 
     n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
     acc_test = np.empty([n_tests_total, n_test, len(net.dcll_slices)])
+    acc_test_ref = np.empty([n_tests_total, n_test])
 
     from dcll.load_mnist import *
     gen_train, gen_valid, gen_test = create_data(valid=False, batch_size = args.batch_size)
     all_test_data = [ gen_test.next() for i in range(n_test) ]
 
     for epoch in range(args.n_epochs):
-        input, labels = image2spiketrain(*gen_train.next())
+        input, labels = gen_train.next()
+        input_spikes, labels_spikes = image2spiketrain(input, labels)
+        input_spikes = torch.Tensor(input_spikes).to(device).reshape(n_iters,
+                                                                     args.batch_size,
+                                                                     *im_dims)
+        labels_spikes = torch.Tensor(labels_spikes).to(device)
 
-        input = torch.Tensor(input).to(device).reshape(n_iters,
-                                                       args.batch_size,
-                                                       *im_dims)
-
-        labels1h = torch.Tensor(labels).to(device)
         net.reset()
 
         # Train
         for iter in range(n_iters):
-            net.train(x = input[iter], labels=labels1h[-1])
+            net.train(x=input_spikes[iter], labels=labels_spikes[iter])
+
+        ref_net.train(x=torch.Tensor(input).to(device).reshape(
+            args.batch_size, *im_dims
+        ), labels=torch.Tensor(labels).to(device))
 
         # Test
         if (epoch % args.n_test_interval)==0:
@@ -185,13 +243,19 @@ if __name__ == "__main__":
                 test_labels1h = torch.Tensor(test_labels).to(device)
 
                 for iter in range(n_iters):
-                    net.test(x = input[iter])
+                    net.test(x = test_input[iter])
+                ref_net.test(torch.Tensor(test_data[0]).to(device).reshape(
+                    args.batch_size, *im_dims))
 
-                acc_test[epoch//args.n_test_interval, i, :] = net.accuracy(labels1h)
+                acc_test[epoch//args.n_test_interval, i, :] = net.accuracy(test_labels1h)
+                acc_test_ref[epoch//args.n_test_interval, i] = ref_net.accuracy(torch.Tensor(test_data[1]).to(device))
+
                 if i == 0:
                     net.write_stats(writer, epoch, comment='_batch_'+str(i))
+                    ref_net.write_stats(writer, epoch)
             if not args.no_save:
                 np.save(d+'/acc_test.npy', acc_test)
+                np.save(d+'/acc_test_ref.npy', acc_test_ref)
                 annotate(d, text = "", filename = "best result")
                 parameter_dict = {
                     name: data.detach().cpu().numpy()
@@ -199,8 +263,6 @@ if __name__ == "__main__":
                 }
                 with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
                     pickle.dump(parameter_dict, f)
-            print("Epoch {} \t Accuracy {}".format(epoch, acc_test[epoch//args.n_test_interval, 0, :]))
-
-
+            print("Epoch {} \t Accuracy {} \t Ref {}".format(epoch, acc_test[epoch//args.n_test_interval, 0, :], acc_test_ref[epoch//args.n_test_interval, 0]))
 
     writer.close()
