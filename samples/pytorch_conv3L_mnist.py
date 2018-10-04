@@ -16,6 +16,7 @@ from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDu
 import timeit
 import pickle
 import numpy as np
+import os
 
 import argparse
 
@@ -43,8 +44,7 @@ def parse_args():
     return parser.parse_args()
 
 class ReferenceConvNetwork(torch.nn.Module):
-    def __init__(self, im_dims, convs, loss
-    ):
+    def __init__(self, im_dims, convs, loss, opt, opt_param):
         super(ReferenceConvNetwork, self).__init__()
 
         def make_conv(inp, conf):
@@ -65,7 +65,7 @@ class ReferenceConvNetwork(torch.nn.Module):
         self.layer3, n = make_conv(n, convs[2])
         self.linear = torch.nn.Linear(32 * 7 * 7, 10).to(device)
 
-        self.optim = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.5)
+        self.optim = opt(self.parameters(), **opt_param)
         self.crit = loss().to(device)
 
     def forward(self, x):
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                       skip_first=args.skip_first
     )
 
-    ref_net = ReferenceConvNetwork(im_dims, convs, loss)
+    ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
 
     from tensorboardX import SummaryWriter
     writer = SummaryWriter(log_dir = log_dir, comment='MNIST Conv')
@@ -205,6 +205,8 @@ if __name__ == "__main__":
         d = mksavedir(pre=args.output)
         annotate(d, text = log_dir, filename= 'log_filename')
         annotate(d, text = str(args), filename= 'args')
+        with open(os.path.join(d, 'args.pkl'), 'wb') as fp:
+            pickle.dump(vars(args), fp)
         save_source(d)
 
     n_tests_total = np.ceil(float(args.n_epochs)/args.n_test_interval).astype(int)
@@ -222,34 +224,39 @@ if __name__ == "__main__":
                                                                      args.batch_size,
                                                                      *im_dims)
         labels_spikes = torch.Tensor(labels_spikes).to(device)
+        ref_input = torch.Tensor(input).to(device).reshape(
+            args.batch_size, *im_dims
+        )
+        ref_label = torch.Tensor(labels).to(device)
 
         net.reset()
-
         # Train
         for iter in range(n_iters):
             net.train(x=input_spikes[iter], labels=labels_spikes[iter])
+            ref_net.train(x=ref_input, labels=ref_label)
 
-        ref_net.train(x=torch.Tensor(input).to(device).reshape(
-            args.batch_size, *im_dims
-        ), labels=torch.Tensor(labels).to(device))
-
-        # Test
         if (epoch % args.n_test_interval)==0:
-            net.reset()
             for i, test_data in enumerate(all_test_data):
+
                 test_input, test_labels = image2spiketrain(*test_data)
                 test_input = torch.Tensor(test_input).to(device).reshape(n_iters,
                                                                          args.batch_size,
                                                                          *im_dims)
                 test_labels1h = torch.Tensor(test_labels).to(device)
+                test_ref_input = torch.Tensor(test_data[0]).to(device).reshape(
+                    args.batch_size, *im_dims
+                )
+                test_ref_label = torch.Tensor(test_data[1]).to(device)
 
+                net.reset()
+                # Test
                 for iter in range(n_iters):
                     net.test(x = test_input[iter])
-                ref_net.test(torch.Tensor(test_data[0]).to(device).reshape(
-                    args.batch_size, *im_dims))
+
+                ref_net.test(test_ref_input)
 
                 acc_test[epoch//args.n_test_interval, i, :] = net.accuracy(test_labels1h)
-                acc_test_ref[epoch//args.n_test_interval, i] = ref_net.accuracy(torch.Tensor(test_data[1]).to(device))
+                acc_test_ref[epoch//args.n_test_interval, i] = ref_net.accuracy(test_ref_label)
 
                 if i == 0:
                     net.write_stats(writer, epoch, comment='_batch_'+str(i))
@@ -264,6 +271,6 @@ if __name__ == "__main__":
                 }
                 with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
                     pickle.dump(parameter_dict, f)
-            print("Epoch {} \t Accuracy {} \t Ref {}".format(epoch, acc_test[epoch//args.n_test_interval, 0, :], acc_test_ref[epoch//args.n_test_interval, 0]))
+            print("Epoch {} \t Accuracy {} \t Ref {}".format(epoch, acc_test[epoch//args.n_test_interval, 1, :], acc_test_ref[epoch//args.n_test_interval, 1]))
 
     writer.close()
