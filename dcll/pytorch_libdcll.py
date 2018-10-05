@@ -49,6 +49,8 @@ def accuracy_by_vote(pvoutput, labels):
 def accuracy_by_mean(pvoutput, labels):
     return float(np.mean((np.array(pvoutput) == labels.argmax(2).cpu().numpy())))
 
+def accuracy_by_mse(pvoutput, labels):
+    return torch.sum((pvoutput - labels)**2).item()
 
 reducedNeuronState = namedtuple(
     'NeuronState', ('eps0', 'eps1', 'arp'))
@@ -587,6 +589,23 @@ class DCLLClassification(DCLLBase):
         cl = np.array(self.clout)
         begin = cl.shape[0]
         self.acc = accuracy_by_vote(cl, targets[-begin:])
+        return self.acc
+
+class DCLLRegression(DCLLBase):
+    def forward(self, input):
+        o, p, pv, pvmem = super(DCLLRegression, self).forward(input)
+        if self.iter>=self.burnin:
+            self.clout.append(p)
+        return o,p,pv, pvmem
+
+    def write_stats(self, writer, label, epoch):
+        super(DCLLRegression, self).write_stats(writer, label, epoch)
+        writer.add_scalar(self.name+'/acc/'+label, self.acc, epoch)
+
+    def accuracy(self, targets):
+        cl = np.array(self.clout)
+        begin = cl.shape[0]
+        self.acc = accuracy_by_mse(cl, targets[-begin:])
         return self.acc
 
 class DCLLGeneration(DCLLBase):

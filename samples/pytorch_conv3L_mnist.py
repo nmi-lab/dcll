@@ -22,7 +22,7 @@ import argparse
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
+    parser = argparse.ArgumentParser(description='DCLL for MNIST')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
     parser.add_argument('--n_epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
@@ -97,7 +97,8 @@ class ConvNetwork(torch.nn.Module):
     def __init__(self, im_dims, batch_size, convs,
                  target_size, act,
                  loss, opt, opt_param, lc_ampl,
-                 alpha=[0.85, 0.9], skip_first=False
+                 alpha=[0.85, 0.9], skip_first=False,
+                 DCLLSlice = DCLLClassification
     ):
         super(ConvNetwork, self).__init__()
         self.batch_size = batch_size
@@ -129,7 +130,7 @@ class ConvNetwork(torch.nn.Module):
         for layer, name in zip([self.layer1, self.layer2, self.layer3],
                                ['conv1', 'conv2', 'conv3']):
             self.dcll_slices.append(
-                DCLLClassification(
+                DCLLSlice(
                     dclllayer = layer,
                     name = name,
                     batch_size = batch_size,
