@@ -18,7 +18,7 @@ This means that you can modify the files of this repo without having to install 
 
 ## How to use
 
-Check out some samples like `samples/pytorch_dense1L_mnist.py`.
+Check out some samples like `samples/pytorch_conv3L_mnist.py`.
 
 ### Tensorboard integration
 
