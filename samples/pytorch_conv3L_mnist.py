@@ -176,7 +176,7 @@ if __name__ == "__main__":
     print(log_dir)
 
     n_iters = 500
-    n_iters_test = 2000
+    n_iters_test = 1000
     im_dims = (1, 28, 28)
     target_size = 10
     # number of test samples: n_test * batch_size
@@ -220,7 +220,9 @@ if __name__ == "__main__":
 
     for epoch in range(args.n_epochs):
         input, labels = gen_train.next()
-        input_spikes, labels_spikes = image2spiketrain(input, labels)
+        input_spikes, labels_spikes = image2spiketrain(input, labels,
+                                                       min_duration=n_iters-1,
+                                                       max_duration=n_iters)
         input_spikes = torch.Tensor(input_spikes).to(device).reshape(n_iters,
                                                                      args.batch_size,
                                                                      *im_dims)
@@ -239,8 +241,10 @@ if __name__ == "__main__":
         if (epoch % args.n_test_interval)==0:
             for i, test_data in enumerate(all_test_data):
 
-                test_input, test_labels = image2spiketrain(*test_data)
-                test_input = torch.Tensor(test_input).to(device).reshape(n_iters,
+                test_input, test_labels = image2spiketrain(*test_data,
+                                                           min_duration=n_iters_test-1,
+                                                           max_duration=n_iters_test)
+                test_input = torch.Tensor(test_input).to(device).reshape(n_iters_test,
                                                                          args.batch_size,
                                                                          *im_dims)
                 test_labels1h = torch.Tensor(test_labels).to(device)
@@ -251,7 +255,7 @@ if __name__ == "__main__":
 
                 net.reset()
                 # Test
-                for iter in range(n_iters):
+                for iter in range(n_iters_test):
                     net.test(x = test_input[iter])
 
                 ref_net.test(test_ref_input)
