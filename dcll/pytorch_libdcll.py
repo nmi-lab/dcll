@@ -113,7 +113,7 @@ class CLLDenseModule(nn.Module):
                                  eps0=eps0.detach(),
                                  eps1=eps1.detach())
 
-        return output, pv
+        return output, pv, vmem
 
 class CLLDenseRRPModule(CLLDenseModule):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100, act = nn.Sigmoid()):
@@ -149,7 +149,7 @@ class CLLDenseRRPModule(CLLDenseModule):
                          eps0=eps0.detach(),
                          eps1=eps1,
                          arp=arp)
-        return output, pv
+        return output, pv, pvmem
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid(), lc_ampl=.5):
@@ -184,10 +184,10 @@ class DenseDCLLlayer(nn.Module):
 
     def forward(self, input):
         input   = input.view(-1,self.in_channels)
-        output, pv = self.i2h(input)
+        output, pv, pvmem = self.i2h(input)
         pvoutput = self.i2o(pv)
         output = output.detach()
-        return output, pvoutput, pv
+        return output, pvoutput, pv, pvmem
 
     def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, init_value = init_value)
