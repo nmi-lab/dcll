@@ -71,7 +71,10 @@ class ReferenceConvNetwork(torch.nn.Module):
                 x = self.layer3(x)
             return x.shape[1:]
 
+        # Untrained linear decoder to the predictions, just like DCLL
         self.linear = torch.nn.Linear(np.prod(latent_size()), 10).to(device)
+        self.linear.weight.requires_grad = False
+        self.linear.bias.requires_grad = False
 
         self.optim = opt(self.parameters(), **opt_param)
         self.crit = loss().to(device)
@@ -101,12 +104,14 @@ class ReferenceConvNetwork(torch.nn.Module):
         self.acc = torch.mean((self.y_test.argmax(1) == labels.argmax(1)).float()).item()
         return self.acc
 
+
 class ConvNetwork(torch.nn.Module):
     def __init__(self, im_dims, batch_size, convs,
                  target_size, act,
                  loss, opt, opt_param, lc_ampl,
                  alpha=[0.85, 0.9],
-                 DCLLSlice = DCLLClassification
+                 DCLLSlice = DCLLClassification,
+                 burnin=50
     ):
         super(ConvNetwork, self).__init__()
         self.batch_size = batch_size
@@ -128,17 +133,10 @@ class ConvNetwork(torch.nn.Module):
         self.layer1, n = make_conv(n, convs[0])
         self.layer2, n = make_conv(n, convs[1])
         self.layer3, n = make_conv(n, convs[2])
-        self.layer4 = DenseDCLLlayer(in_channels = np.prod(n), out_channels = target_size,
-                                     target_size = target_size,
-                                     alpha = alpha[0], alphas = alpha[1], act=act,
-                                     wrp = 0,alpharp = .65,
-                                     lc_ampl = lc_ampl).to(device).init_hiddens(batch_size)
-
-        # self.layer4.i2h.weight.data.mul_(100.)
 
         self.dcll_slices = []
-        for layer, name in zip([self.layer1, self.layer2, self.layer3, self.layer4],
-                               ['conv1', 'conv2', 'conv3', 'dense4']):
+        for layer, name in zip([self.layer1, self.layer2, self.layer3],
+                               ['conv1', 'conv2', 'conv3']):
             self.dcll_slices.append(
                 DCLLSlice(
                     dclllayer = layer,
@@ -148,15 +146,13 @@ class ConvNetwork(torch.nn.Module):
                     optimizer = opt,
                     kwargs_optimizer = opt_param,
                     collect_stats = True,
-                    burnin = 50)
+                    burnin = burnin)
             )
 
 
     def learn(self, x, labels):
         spikes = x
         for i, sl in enumerate(self.dcll_slices):
-            if i == 3:
-                spikes = spikes.view(spikes.shape[0], -1)
             spikes, _, pv, _ = sl.train(spikes, labels)
 
     def test(self, x):
@@ -196,13 +192,14 @@ if __name__ == "__main__":
     # loss = torch.nn.CrossEntropyLoss
     loss = torch.nn.SmoothL1Loss
 
+    burnin = 50
     # format: (out_channels, kernel_size, padding, pooling)
-    # convs = [ (32, 3, 3, 2), (64, 3, 3, 2), (64, 3, 3, 1)]
     convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
+    # convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1), (64, 3, 3, 1) ]
 
     net = ConvNetwork(im_dims, args.batch_size, convs, target_size,
                       act=torch.nn.Sigmoid(), alpha=[args.alpha, args.alphas],
-                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl
+                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl, burnin=burnin
     )
 
     ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
@@ -247,7 +244,8 @@ if __name__ == "__main__":
         ref_net.train()
         for iter in range(n_iters):
             net.learn(x=input_spikes[iter], labels=labels_spikes[iter])
-            ref_net.learn(x=ref_input, labels=ref_label)
+            if iter > burnin:
+                ref_net.learn(x=ref_input, labels=ref_label)
 
         if (epoch % args.n_test_interval)==0:
             for i, test_data in enumerate(all_test_data):
