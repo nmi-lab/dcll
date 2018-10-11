@@ -603,7 +603,7 @@ class DCLLRegression(DCLLBase):
         writer.add_scalar(self.name+'/acc/'+label, self.acc, epoch)
 
     def accuracy(self, targets):
-        cl = np.array(self.clout)
+        cl = torch.stack(self.clout, dim=0)
         begin = cl.shape[0]
         self.acc = accuracy_by_mse(cl, targets[-begin:])
         return self.acc
