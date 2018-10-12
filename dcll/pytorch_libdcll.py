@@ -151,6 +151,7 @@ class CLLDenseRRPModule(CLLDenseModule):
                          arp=arp)
         return output, pv, pvmem
 
+
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid(), lc_ampl=.5):
         if (target_size is None):
@@ -199,6 +200,25 @@ class DenseDCLLlayer(nn.Module):
             return
         for field in self.i2h.state:
             field[mask] = 0.
+
+
+class AnalogDenseDCLLlayer(nn.Module):
+    def __init__(self, in_channels, out_channels, target_size, act = nn.Sigmoid()):
+        super(AnalogDenseDCLLlayer, self).__init__()
+        self.i2h = nn.Sequential(
+            nn.Linear(in_channels, out_channels),
+            nn.Sigmoid()
+        )
+        self.i2o = nn.Linear(out_channels, target_size)
+        # Disable gradients on weights and biases at the local error layer
+        self.i2o.weight.requires_grad = False
+        self.i2o.bias.requires_grad = False
+
+    def forward(self, x):
+        out = self.i2h(x)       # Hidden layer activity
+        pout = self.i2o(out)    # Error layer acticity
+        out = out.detach()      # Disable learning on the output
+        return out, pout
 
 class ContinuousConv2D(nn.Module):
     NeuronState = namedtuple(
