@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Mon 16 Jul 2018 09:56:30 PM MDT
-# Last Modified : Tue 11 Sep 2018 09:33:40 AM PDT
+# Last Modified : Mon 08 Oct 2018 09:07:09 AM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
 # Licence : GPLv2
@@ -19,10 +19,12 @@ parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
 parser.add_argument('--batchsize', type=int, default=80, metavar='N', help='input batch size for training (default: 128)')
 parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
+parser.add_argument('--spiking', type=bool, default=True, metavar='N', help='Spiking')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
+parser.add_argument('--netscale', type=float, default=1.0, metavar='N', help='scale network size')
 parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
 parser.add_argument('--beta', type=float, default=.95, metavar='N', help='Beta2 parameters for Adamax')
 parser.add_argument('--arp', type=float, default=1, metavar='N', help='Absolute refractory period in ticks')
@@ -51,12 +53,12 @@ dt = 1000 #us
 in_channels = 2
 ds = 4
 im_dims = im_width, im_height = (128//ds, 128//ds)
-out_channels_1 = 128
-out_channels_2 = 256
-out_channels_3 = 256
-out_channels_4 = 512
-out_channels_5 = 1024
-out_channels_6 = 1024
+out_channels_1 = int(128*args.netscale)
+out_channels_2 = int(256*args.netscale)
+out_channels_3 = int(256*args.netscale)
+out_channels_4 = int(512*args.netscale)
+out_channels_5 = int(1024*args.netscale)
+out_channels_6 = int(1024*args.netscale)
 target_size = 11
 act=nn.Sigmoid()
                 
@@ -76,6 +78,7 @@ layer1 = Conv2dDCLLlayer(
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
+        spiking = args.spiking,
         lc_ampl = args.lc_ampl).to(device)
 
 layer2 = Conv2dDCLLlayer(
@@ -92,6 +95,7 @@ layer2 = Conv2dDCLLlayer(
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
+        spiking = args.spiking,
         lc_ampl = args.lc_ampl).to(device)
 
 layer3 = Conv2dDCLLlayer(
@@ -108,6 +112,7 @@ layer3 = Conv2dDCLLlayer(
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
+        spiking = args.spiking,
         lc_ampl = args.lc_ampl).to(device)
 
 layer4 = Conv2dDCLLlayer(
@@ -124,6 +129,43 @@ layer4 = Conv2dDCLLlayer(
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
+        spiking = args.spiking,
+        lc_ampl = args.lc_ampl
+        ).to(device)
+
+layer5 = Conv2dDCLLlayer(
+        in_channels = layer4.out_channels,
+        out_channels = out_channels_5,
+        im_dims = layer4.get_output_shape(),
+        target_size=target_size,
+        pooling=1,
+        padding=0,
+        kernel_size=1,
+        alpha = args.alpha,
+        alphas = args.alphas,
+        alpharp = .65,
+        wrp = args.arp,
+        act = act,
+        lc_dropout = .25,
+        spiking = args.spiking,
+        lc_ampl = args.lc_ampl
+        ).to(device)
+
+layer6 = Conv2dDCLLlayer(
+        in_channels = layer5.out_channels,
+        out_channels = out_channels_6,
+        im_dims = layer5.get_output_shape(),
+        target_size=target_size,
+        pooling=1,
+        padding=0,
+        kernel_size=1,
+        alpha = args.alpha,
+        alphas = args.alphas,
+        alpharp = .65,
+        wrp = args.arp,
+        act = act,
+        lc_dropout = .25,
+        spiking = args.spiking,
         lc_ampl = args.lc_ampl
         ).to(device)
 
@@ -135,7 +177,7 @@ loss = torch.nn.SmoothL1Loss
 #loss = torch.nn.CrossEntropyLoss
 #opt_param = {'lr':3e-4}
 
-dcll_slices = [None for i in range(4)]
+dcll_slices = [None for i in range(6)]
 dcll_slices[0] = DCLLClassification(
         dclllayer = layer1,
         name = 'conv2d_layer1',
@@ -176,25 +218,25 @@ dcll_slices[3] = DCLLClassification(
         collect_stats = True,
         burnin = 50)
 
-#dcll_slices[4] = DCLLClassification(
-#        dclllayer = layer5,
-#        name = 'conv2d_layer5',
-#        batch_size = batch_size,
-#        loss = loss,
-#        optimizer = opt,
-#        kwargs_optimizer = opt_param,
-#        collect_stats = True,
-#        burnin = 50)
-#
-#dcll_slices[5] = DCLLClassification(
-#        dclllayer = layer6,
-#        name = 'conv2d_layer6',
-#        batch_size = batch_size,
-#        loss = loss,
-#        optimizer = opt,
-#        kwargs_optimizer = opt_param,
-#        collect_stats = True,
-#        burnin = 50)
+dcll_slices[4] = DCLLClassification(
+        dclllayer = layer5,
+        name = 'conv2d_layer5',
+        batch_size = batch_size,
+        loss = loss,
+        optimizer = opt,
+        kwargs_optimizer = opt_param,
+        collect_stats = True,
+        burnin = 50)
+
+dcll_slices[5] = DCLLClassification(
+        dclllayer = layer6,
+        name = 'conv2d_layer6',
+        batch_size = batch_size,
+        loss = loss,
+        optimizer = opt,
+        kwargs_optimizer = opt_param,
+        collect_stats = True,
+        burnin = 50)
 
 #Load data
 gen_train, _ = create_data(
@@ -264,6 +306,8 @@ if __name__ == "__main__":
                 output2 = dcll_slices[1].train(output1,    labels1h[iter].to(device))[0]
                 output3 = dcll_slices[2].train(output2,    labels1h[iter].to(device))[0]
                 output4 = dcll_slices[3].train(output3,    labels1h[iter].to(device))[0]
+                output5 = dcll_slices[4].train(output4,    labels1h[iter].to(device))[0]
+                output6 = dcll_slices[5].train(output5,    labels1h[iter].to(device))[0]
 
             if (epoch%n_test_interval)==1:
 
@@ -276,15 +320,19 @@ if __name__ == "__main__":
                         output2 = dcll_slices[1].forward(output1   )[0]
                         output3 = dcll_slices[2].forward(output2   )[0]
                         output4 = dcll_slices[3].forward(output3   )[0]
+                        output5 = dcll_slices[4].forward(output4   )[0]
+                        output6 = dcll_slices[5].forward(output5   )[0]
 
                     acc_test[epoch//n_test_interval,i,:] = [ s.accuracy(labels1h_tests[i].to(device)) for s in dcll_slices]
                     acc__test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[epoch//n_test_interval,i])])
                     print('TEST Epoch {0} Batch {1}:'.format(epoch, i) + acc__test_print)
                     [s.write_stats(writer, label = 'test/', epoch = epoch) for s in dcll_slices]
 
-            if not args.no_save:
-                np.save(d+'/acc_test.npy', acc_test)
-                annotate(d, text = "", filename = "best result")
+        if not args.no_save:
+            np.save(d+'/acc_test.npy', acc_test)
+            save(d,args,'args.pkl')
+            annotate(d, text = "", filename = "best result")
+            save_dcllslices(d, dcll_slices)
 
     else:
         from tqdm import tqdm
@@ -303,6 +351,8 @@ if __name__ == "__main__":
                 output2 = dcll_slices[1].forward(output41   )[0]
                 output3 = dcll_slices[2].forward(output2   )[0]
                 output4 = dcll_slices[3].forward(output3   )[0]
+                output5 = dcll_slices[4].forward(output3   )[0]
+                output6 = dcll_slices[5].forward(output3   )[0]
                 if i==0: doutput1.append(output41[0].detach().cpu().numpy())
                 if i==0: doutput2.append(output42[0].detach().cpu().numpy())
                 if i==0: doutput3.append(output43[0].detach().cpu().numpy())
