@@ -49,6 +49,8 @@ def accuracy_by_vote(pvoutput, labels):
 def accuracy_by_mean(pvoutput, labels):
     return float(np.mean((np.array(pvoutput) == labels.argmax(2).cpu().numpy())))
 
+def accuracy_by_mse(pvoutput, labels):
+    return torch.sum((pvoutput - labels)**2).item()
 
 reducedNeuronState = namedtuple(
     'NeuronState', ('eps0', 'eps1', 'arp'))
@@ -111,7 +113,7 @@ class CLLDenseModule(nn.Module):
                                  eps0=eps0.detach(),
                                  eps1=eps1.detach())
 
-        return output, pv
+        return output, pv, vmem
 
 class CLLDenseRRPModule(CLLDenseModule):
     def __init__(self, in_channels, out_channels, bias=True, alpha = .95, alphas=.9, alpharp = .65, wrp = 100, act = nn.Sigmoid()):
@@ -147,7 +149,8 @@ class CLLDenseRRPModule(CLLDenseModule):
                          eps0=eps0.detach(),
                          eps1=eps1,
                          arp=arp)
-        return output, pv
+        return output, pv, pvmem
+
 
 class DenseDCLLlayer(nn.Module):
     def __init__(self, in_channels, out_channels, target_size=None, bias= True, alpha=.9, alphas = .85, alpharp =.65, wrp = 0., act = nn.Sigmoid(), lc_ampl=.5):
@@ -182,10 +185,10 @@ class DenseDCLLlayer(nn.Module):
 
     def forward(self, input):
         input   = input.view(-1,self.in_channels)
-        output, pv = self.i2h(input)
+        output, pv, pvmem = self.i2h(input)
         pvoutput = self.i2o(pv)
         output = output.detach()
-        return output, pvoutput, pv
+        return output, pvoutput, pv, pvmem
 
     def init_hiddens(self, batch_size, init_value = 0):
         self.i2h.init_state(batch_size, init_value = init_value)
@@ -197,6 +200,25 @@ class DenseDCLLlayer(nn.Module):
             return
         for field in self.i2h.state:
             field[mask] = 0.
+
+
+class AnalogDenseDCLLlayer(nn.Module):
+    def __init__(self, in_channels, out_channels, target_size, act = nn.Sigmoid()):
+        super(AnalogDenseDCLLlayer, self).__init__()
+        self.i2h = nn.Sequential(
+            nn.Linear(in_channels, out_channels),
+            nn.Sigmoid()
+        )
+        self.i2o = nn.Linear(out_channels, target_size)
+        # Disable gradients on weights and biases at the local error layer
+        self.i2o.weight.requires_grad = False
+        self.i2o.bias.requires_grad = False
+
+    def forward(self, x):
+        out = self.i2h(x)       # Hidden layer activity
+        pout = self.i2o(out)    # Error layer acticity
+        out = out.detach()      # Disable learning on the output
+        return out, pout
 
 class ContinuousConv2D(nn.Module):
     NeuronState = namedtuple(
@@ -565,12 +587,12 @@ class DCLLBase(nn.Module):
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[0]), epoch)
-            
+
             name = self.name+'/'+'/high_pv/'+label
             ##entropy method
             #writer.add_scalar(name, -np.sum(pd*np.log(pd)), epoch)
             writer.add_scalar(name, (pd[-1]), epoch)
-             
+
             print(self.name + " low:{0:1.3} high:{1:1.3}".format(pd[0],pd[-1]))
 
 
@@ -592,7 +614,7 @@ class DCLLBase(nn.Module):
             #        else:
             #            wz4 = F.conv_transpose2d(p.data*self.dclllayer.i2h.state.ca**4
             #            p.data = p.data.add(p.data,-self.optimizer.param_groups[0]['lr']*)
-                    
+
         return output, pvoutput, pv, pvmem
 
 class DCLLClassification(DCLLBase):
@@ -610,6 +632,23 @@ class DCLLClassification(DCLLBase):
         cl = np.array(self.clout)
         begin = cl.shape[0]
         self.acc = accuracy_by_vote(cl, targets[-begin:])
+        return self.acc
+
+class DCLLRegression(DCLLBase):
+    def forward(self, input):
+        o, p, pv, pvmem = super(DCLLRegression, self).forward(input)
+        if self.iter>=self.burnin:
+            self.clout.append(p)
+        return o,p,pv, pvmem
+
+    def write_stats(self, writer, label, epoch):
+        super(DCLLRegression, self).write_stats(writer, label, epoch)
+        writer.add_scalar(self.name+'/acc/'+label, self.acc, epoch)
+
+    def accuracy(self, targets):
+        cl = torch.stack(self.clout, dim=0)
+        begin = cl.shape[0]
+        self.acc = accuracy_by_mse(cl, targets[-begin:])
         return self.acc
 
 class DCLLGeneration(DCLLBase):
