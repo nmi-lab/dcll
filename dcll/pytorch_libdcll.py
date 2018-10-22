@@ -201,7 +201,21 @@ class DenseDCLLlayer(nn.Module):
 class ContinuousConv2D(nn.Module):
     NeuronState = namedtuple(
     'NeuronState', ('eps0', 'eps1'))
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=2, dilation=1, groups=1, bias=True, alpha = .95, alphas=.9, act = nn.Sigmoid()):
+    def __init__(self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=1,
+            padding=2,
+            dilation=1,
+            groups=1,
+            bias=True,
+            alpha = .95,
+            alphas=.9,
+            act = nn.Sigmoid(),
+            spiking = True,
+            **kwargs):
+
         super(ContinuousConv2D, self).__init__()
         if in_channels % groups != 0:
             raise ValueError('in_channels must be divisible by groups')
@@ -219,6 +233,11 @@ class ContinuousConv2D(nn.Module):
         self.dilation = dilation
         self.groups = groups
         self.act = act
+        self.spiking = spiking
+        if spiking:
+            self.output_act = lambda x: (x>0).float()
+        else:
+            self.output_act = lambda x: x
 
         self.weight = nn.Parameter(torch.Tensor(out_channels, in_channels // groups, *self.kernel_size))
         if bias:
@@ -270,8 +289,9 @@ class ContinuousConv2D(nn.Module):
         eps0 = input + self.alphas * self.state.eps0
         eps1 = self.alpha * self.state.eps1 + eps0
         pvmem = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
-        output = (pvmem>0).float()
         pv = self.act(pvmem)
+        output = self.output_act(pvmem)
+
 
         ##best
         #arp = .65*self.state.arp + output*10
@@ -299,7 +319,7 @@ class ContinuousRefractoryConv2D(ContinuousConv2D):
             alphas=.9,
             alpharp = .65,
             wrp = 1,
-            act = nn.Sigmoid()):
+            act = nn.Sigmoid(), **kwargs):
         '''
         Continuous local learning with relative refractory period. No isyn or vmem dynamics for speed and memory.
         *wrp*: weight for the relative refractory period
@@ -334,9 +354,9 @@ class ContinuousRefractoryConv2D(ContinuousConv2D):
         eps1 = self.alpha * self.state.eps1 + eps0
         self.state.arp[self.state.arp<0] += 1
         pvmem = F.conv2d(eps1, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups) - 1000000*(self.state.arp<0).float()
-        output = (pvmem>0).float()
-        arp = self.state.arp - output*self.arp 
         pv = self.act(pvmem)
+        if not self.spiking: raise Exception('Refractory not allowed in non-spiking mode')
+        arp = self.state.arp - output*self.arp 
 
         ##best
         #arp = .65*self.state.arp + output*10
@@ -364,7 +384,7 @@ class ContinuousRelativeRefractoryConv2D(ContinuousConv2D):
             alphas=.9,
             alpharp = .65,
             wrp = 1,
-            act = nn.Sigmoid()):
+            act = nn.Sigmoid(), **kwargs):
         '''
         Continuous local learning with relative refractory period. No isyn or vmem dynamics for speed and memory.
         *wrp*: weight for the relative refractory period
@@ -403,6 +423,7 @@ class ContinuousRelativeRefractoryConv2D(ContinuousConv2D):
         softarp = self.alpharp*self.state.arp - self.act(pvmem+self.state.arp)*self.wrp
         pv = self.act(pvmem+softarp)
 
+        if not self.spiking: raise Exception('Refractory not allowed in non-spiking mode')
         output = ((pvmem+self.state.arp)>0).float()
         arp = self.alpharp*self.state.arp - output*self.wrp
 
@@ -432,7 +453,8 @@ class Conv2dDCLLlayer(nn.Module):
             wrp = 0,
             act = nn.Sigmoid(),
             lc_dropout = False,
-            lc_ampl = .5):
+            lc_ampl = .5,
+            spiking = True):
 
         super(Conv2dDCLLlayer, self).__init__()
         self.im_dims = im_dims
@@ -452,9 +474,10 @@ class Conv2dDCLLlayer(nn.Module):
         self.kernel_size = kernel_size
         self.target_size = target_size
         if wrp>0:
+            if not spiking: raise Exception('Non-spiking not allowed with refractory neurons')
             self.i2h = ContinuousRelativeRefractoryConv2D(in_channels, out_channels, kernel_size, padding=padding, dilation=dilation, stride=stride, alpha = alpha, alphas = alphas, alpharp = alpharp, wrp = wrp, act = act)
         else:
-            self.i2h = ContinuousConv2D(in_channels, out_channels, kernel_size, padding=padding, dilation=dilation, stride=stride, alpha = alpha, alphas = alphas, act = act)
+            self.i2h = ContinuousConv2D(in_channels, out_channels, kernel_size, padding=padding, dilation=dilation, stride=stride, alpha = alpha, alphas = alphas, act = act, spiking= spiking)
         conv_shape = self.i2h.get_output_shape(self.im_dims)
         print('Conv2D Layer ', self.im_dims, conv_shape, self.in_channels, self.out_channels, kernel_size, dilation, padding, stride)
         self.output_shape = self.pool(torch.zeros(1, *conv_shape)).shape[1:]
