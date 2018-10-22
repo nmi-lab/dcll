@@ -22,7 +22,6 @@ parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='di
 parser.add_argument('--spiking', type=bool, default=True, metavar='N', help='Spiking')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
-parser.add_argument('--netscale', type=float, default=1, metavar='N', help='adjust the network size')
 parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
 parser.add_argument('--netscale', type=float, default=1.0, metavar='N', help='scale network size')
