@@ -10,7 +10,7 @@
 # Licence : GPLv2
 #-----------------------------------------------------------------------------
 import torch
-from dcll.pytorch_libdcll import Conv2dDCLLlayer, device, DCLLClassification
+from dcll.pytorch_libdcll import Conv2dDCLLlayer, DenseDCLLlayer, device, DCLLClassification
 from dcll.experiment_tools import mksavedir, save_source, annotate
 from dcll.pytorch_utils import grad_parameters, named_grad_parameters, NetworkDumper, tonumpy
 import timeit
@@ -22,7 +22,7 @@ import argparse
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
+    parser = argparse.ArgumentParser(description='DCLL for MNIST')
     parser.add_argument('--batch_size', type=int, default=64, metavar='N', help='input batch size for training (default: 128)')
     parser.add_argument('--n_epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
@@ -30,6 +30,7 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed (default: 0)')
     parser.add_argument('--n_test_interval', type=int, default=20, metavar='N', help='how many epochs to run before testing')
     parser.add_argument('--n_test_samples', type=int, default=1500, metavar='N', help='how many test samples to use')
+    parser.add_argument('--n_iters_test', type=int, default=1500, metavar='N', help='for how many ms do we present a sample during classification')
     parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
     parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
     parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
@@ -40,7 +41,6 @@ def parse_args():
                         help='comment to name tensorboard files')
     parser.add_argument('--output', type=str, default='Results/',
                         help='folder name for the results')
-    parser.add_argument('--skip_first', type=bool, default=False, metavar='N', help='do not train first layer')
     return parser.parse_args()
 
 class ReferenceConvNetwork(torch.nn.Module):
@@ -63,7 +63,18 @@ class ReferenceConvNetwork(torch.nn.Module):
         self.layer1, n = make_conv(n, convs[0])
         self.layer2, n = make_conv(n, convs[1])
         self.layer3, n = make_conv(n, convs[2])
-        self.linear = torch.nn.Linear(32 * 7 * 7, 10).to(device)
+        def latent_size():
+            with torch.no_grad():
+                x = torch.zeros(im_dims).unsqueeze(0).to(device)
+                x = self.layer1(x)
+                x = self.layer2(x)
+                x = self.layer3(x)
+            return x.shape[1:]
+
+        # Untrained linear decoder to the predictions, just like DCLL
+        self.linear = torch.nn.Linear(np.prod(latent_size()), 10).to(device)
+        self.linear.weight.requires_grad = False
+        self.linear.bias.requires_grad = False
 
         self.optim = opt(self.parameters(), **opt_param)
         self.crit = loss().to(device)
@@ -75,7 +86,7 @@ class ReferenceConvNetwork(torch.nn.Module):
         x = self.linear(x.view(x.shape[0], -1))
         return x
 
-    def train(self, x, labels):
+    def learn(self, x, labels):
         y = self.forward(x)
 
         self.optim.zero_grad()
@@ -93,15 +104,17 @@ class ReferenceConvNetwork(torch.nn.Module):
         self.acc = torch.mean((self.y_test.argmax(1) == labels.argmax(1)).float()).item()
         return self.acc
 
+
 class ConvNetwork(torch.nn.Module):
     def __init__(self, im_dims, batch_size, convs,
                  target_size, act,
                  loss, opt, opt_param, lc_ampl,
-                 alpha=[0.85, 0.9], skip_first=False
+                 alpha=[0.85, 0.9],
+                 DCLLSlice = DCLLClassification,
+                 burnin=50
     ):
         super(ConvNetwork, self).__init__()
         self.batch_size = batch_size
-        self.skip_first = skip_first
 
         def make_conv(inp, conf):
             layer = Conv2dDCLLlayer(in_channels = inp[0], out_channels = conf[0],
@@ -121,15 +134,11 @@ class ConvNetwork(torch.nn.Module):
         self.layer2, n = make_conv(n, convs[1])
         self.layer3, n = make_conv(n, convs[2])
 
-        # scale up the first layer weights
-        # required if we don't train it, otherwise not enough spikes pass through
-        self.layer1.i2h.weight.data.mul_(100.)
-
         self.dcll_slices = []
         for layer, name in zip([self.layer1, self.layer2, self.layer3],
                                ['conv1', 'conv2', 'conv3']):
             self.dcll_slices.append(
-                DCLLClassification(
+                DCLLSlice(
                     dclllayer = layer,
                     name = name,
                     batch_size = batch_size,
@@ -137,18 +146,14 @@ class ConvNetwork(torch.nn.Module):
                     optimizer = opt,
                     kwargs_optimizer = opt_param,
                     collect_stats = True,
-                    burnin = 50)
+                    burnin = burnin)
             )
 
 
-    def train(self, x, labels):
+    def learn(self, x, labels):
         spikes = x
         for i, sl in enumerate(self.dcll_slices):
-            if self.skip_first and i==0:
-                # if skip first is on we don't train the first layer
-                spikes, _, pv, _ = sl.forward(spikes)
-            else:
-                spikes, _, pv, _ = sl.train(spikes, labels)
+            spikes, _, pv, _ = sl.train(spikes, labels)
 
     def test(self, x):
         spikes = x
@@ -175,7 +180,7 @@ if __name__ == "__main__":
     print(log_dir)
 
     n_iters = 500
-    n_iters_test = 2000
+    n_iters_test = args.n_iters_test
     im_dims = (1, 28, 28)
     target_size = 10
     # number of test samples: n_test * batch_size
@@ -184,15 +189,17 @@ if __name__ == "__main__":
     opt = torch.optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
 
+    # loss = torch.nn.CrossEntropyLoss
     loss = torch.nn.SmoothL1Loss
 
+    burnin = 50
     # format: (out_channels, kernel_size, padding, pooling)
     convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1) ]
+    # convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1), (64, 3, 3, 1) ]
 
     net = ConvNetwork(im_dims, args.batch_size, convs, target_size,
                       act=torch.nn.Sigmoid(), alpha=[args.alpha, args.alphas],
-                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl,
-                      skip_first=args.skip_first
+                      loss=loss, opt=opt, opt_param=opt_param, lc_ampl=args.lc_ampl, burnin=burnin
     )
 
     ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
@@ -219,7 +226,9 @@ if __name__ == "__main__":
 
     for epoch in range(args.n_epochs):
         input, labels = gen_train.next()
-        input_spikes, labels_spikes = image2spiketrain(input, labels)
+        input_spikes, labels_spikes = image2spiketrain(input, labels,
+                                                       min_duration=n_iters-1,
+                                                       max_duration=n_iters)
         input_spikes = torch.Tensor(input_spikes).to(device).reshape(n_iters,
                                                                      args.batch_size,
                                                                      *im_dims)
@@ -231,15 +240,20 @@ if __name__ == "__main__":
 
         net.reset()
         # Train
+        net.train()
+        ref_net.train()
         for iter in range(n_iters):
-            net.train(x=input_spikes[iter], labels=labels_spikes[iter])
-            ref_net.train(x=ref_input, labels=ref_label)
+            net.learn(x=input_spikes[iter], labels=labels_spikes[iter])
+            if iter > burnin:
+                ref_net.learn(x=ref_input, labels=ref_label)
 
         if (epoch % args.n_test_interval)==0:
             for i, test_data in enumerate(all_test_data):
 
-                test_input, test_labels = image2spiketrain(*test_data)
-                test_input = torch.Tensor(test_input).to(device).reshape(n_iters,
+                test_input, test_labels = image2spiketrain(*test_data,
+                                                           min_duration=n_iters_test-1,
+                                                           max_duration=n_iters_test)
+                test_input = torch.Tensor(test_input).to(device).reshape(n_iters_test,
                                                                          args.batch_size,
                                                                          *im_dims)
                 test_labels1h = torch.Tensor(test_labels).to(device)
@@ -249,8 +263,10 @@ if __name__ == "__main__":
                 test_ref_label = torch.Tensor(test_data[1]).to(device)
 
                 net.reset()
+                net.eval()
+                ref_net.eval()
                 # Test
-                for iter in range(n_iters):
+                for iter in range(n_iters_test):
                     net.test(x = test_input[iter])
 
                 ref_net.test(test_ref_input)
@@ -271,6 +287,6 @@ if __name__ == "__main__":
                 }
                 with open(d+'/parameters_{}.pkl'.format(epoch), 'wb') as f:
                     pickle.dump(parameter_dict, f)
-            print("Epoch {} \t Accuracy {} \t Ref {}".format(epoch, acc_test[epoch//args.n_test_interval, 1, :], acc_test_ref[epoch//args.n_test_interval, 1]))
+            print("Epoch {} \t Accuracy {} \t Ref {}".format(epoch, np.mean(acc_test[epoch//args.n_test_interval], axis=0), np.mean(acc_test_ref[epoch//args.n_test_interval], axis=0)))
 
     writer.close()
