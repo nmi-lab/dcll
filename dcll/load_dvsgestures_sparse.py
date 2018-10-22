@@ -179,7 +179,9 @@ def compute_start_time(labels,pad):
 
 def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000):
     batch = np.empty([batch_size,T]+size, dtype='float')
-    batch_idx = np.random.randint(0,len(hdf5_group), size=batch_size)
+    batch_idx = np.arange(len(hdf5_group), dtype='int')
+    np.random.shuffle(batch_idx)
+    batch_idx = batch_idx[:batch_size]
     batch_idx_l = np.empty(batch_size, dtype= 'int')
 
     for i, b in (enumerate(batch_idx)):
