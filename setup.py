@@ -24,6 +24,6 @@ setup(
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     test_suite = 'nose.collector',
     long_description=long_description,
-    # license='FZI',
+    license='GPLv2',
     install_requires=["tensorboardX","h5py","tqdm"]
 )

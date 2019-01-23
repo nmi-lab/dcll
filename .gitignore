@@ -15,7 +15,6 @@ c_nsat/data/
 c_nsat/obj
 *.hex
 *.svg
-*.txt
 bin/
 evs_*_*
 env/
