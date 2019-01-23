@@ -5,15 +5,17 @@
 # Creation Date : Fri 01 Dec 2017 10:05:17 PM PST
 # Last Modified : Sun 29 Jul 2018 01:39:06 PM PDT
 #
-# Copyright : (c) 
+# Copyright : (c)
 # Licence : GPLv2
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 import struct
 import numpy as np
 import scipy.misc
 import h5py
 import glob
 from .events_timeslices import *
+import os
+dcll_folder = os.path.dirname(__file__)
 
 mapping = { 0 :'Hand Clapping'  ,
             1 :'Right Hand Wave',
@@ -86,7 +88,7 @@ class SequenceGenerator(object):
 def gather_gestures_stats(hdf5_grp):
     from collections import Counter
     labels = []
-    for d in hdf5_grp:          
+    for d in hdf5_grp:
         labels += hdf5_grp[d]['labels'][:,0].tolist()
     count = Counter(labels)
     stats = np.array(list(count.values()))
@@ -94,7 +96,7 @@ def gather_gestures_stats(hdf5_grp):
     return stats
 
 
-    
+
 
 def gather_aedat(directory, start_id, end_id, filename_prefix = 'user'):
     import glob
@@ -113,7 +115,7 @@ def aedat_to_events(filename):
     with open(filename, 'rb') as f:
         for i in range(5):
             f.readline()
-        while True: 
+        while True:
             data_ev_head = f.read(28)
             if len(data_ev_head)==0: break
 
@@ -165,7 +167,7 @@ def aedat_to_events(filename):
 #    sorted_events = [np.zeros([4,0]) for i in range(n_classes)]
 #
 #    for label, start, end in labels:
-#        sorted_events[label] = np.concatenate([sorted_events[label],events[:,:,:,start:end]])    
+#        sorted_events[label] = np.concatenate([sorted_events[label],events[:,:,:,start:end]])
 #
 #    return sorted_events
 def compute_start_time(labels,pad):
@@ -193,7 +195,7 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
             #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
             cand_batch = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
         batch[i] = cand_batch
-        
+
     #print(batch_idx_l)
     return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
 
@@ -221,7 +223,7 @@ def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64]
 #    np.random.shuffle(idxs)
 #    idx = idxs[0]
 #    start_time = labels[idx][1]
-#    
+#
 #    return start_time
 
 def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 1000):
@@ -233,11 +235,11 @@ def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 
         print("Empty batch found, returning -1")
         return -1
 
-def create_events_hdf5():
-    fns_train = gather_aedat('/share/data/DvsGesture/aedat/',1,24)
-    fns_test = gather_aedat('/share/data/DvsGesture/aedat/',24,30)
+def create_events_hdf5(hdf5_filename):
+    fns_train = gather_aedat(os.path.join(dcll_folder, '../data/DvsGesture'),1,24)
+    fns_test = gather_aedat(os.path.join(dcll_folder, '../data/DvsGesture'),24,30)
 
-    with h5py.File('data/dvs_gestures_events.hdf5', 'w') as f:
+    with h5py.File(hdf5_filename, 'w') as f:
         f.clear()
 
         print("processing training data...")
@@ -273,8 +275,11 @@ def create_events_hdf5():
         stats =  gather_gestures_stats(train_grp)
         f.create_dataset('stats',stats.shape, dtype = stats.dtype)
         f['stats'][:] = stats
-    
-def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
+
+def create_data(filename = os.path.join(dcll_folder, '../data/dvs_gestures_events.hdf5'),
+                batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
+    if not os.path.isfile(filename):
+        create_events_hdf5(filename)
     strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
     stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
     return strain, stest
@@ -311,12 +316,3 @@ def plot_gestures_imshow(images, labels, nim=11, avg=50, do1h = True, transpose=
 
 
     #pass
-
-
-
-
-
-    
-
-
-

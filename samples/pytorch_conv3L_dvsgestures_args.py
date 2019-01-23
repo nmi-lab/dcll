@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/env python
 #-----------------------------------------------------------------------------
 # File Name : spikeConv2d.py
 # Author: Emre Neftci
@@ -20,7 +20,7 @@ parser.add_argument('--batchsize', type=int, default=80, metavar='N', help='inpu
 parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
 parser.add_argument('--spiking', type=bool, default=True, metavar='N', help='Spiking')
-parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
+parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
 parser.add_argument('--lr', type=float, default=5e-7, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
@@ -63,9 +63,7 @@ out_channels_5 = int(1024*args.netscale)
 out_channels_6 = int(1024*args.netscale)
 target_size = 11
 act=nn.Sigmoid()
-#aa = nn.Hardtanh(min_val=0)
-#act=lambda x: aa((x/10+.5))
-        
+
 layer1 = Conv2dDCLLlayer(
         in_channels,
         out_channels = out_channels_1,
@@ -232,7 +230,7 @@ if __name__ == "__main__":
             labels1h = torch.Tensor(labels)
 
             [s.init(batch_size, init_states = False) for s in dcll_slices]
-            
+
             for iter in tqdm(range(n_iters)):
                 output1 = dcll_slices[0].train_dcll(input[iter].to(device),labels1h[iter].to(device), regularize = .001)[0]
                 output2 = dcll_slices[1].train_dcll(output1,    labels1h[iter].to(device)           , regularize = .001)[0]
@@ -280,7 +278,7 @@ if __name__ == "__main__":
                 if i==0: doutput2.append(output42[0].detach().cpu().numpy())
                 if i==0: doutput3.append(output43[0].detach().cpu().numpy())
                 if i==0: doutput4.append(output44[0].detach().cpu().numpy())
-                
+
             acc_test_only = [ s.accuracy(labels1h_tests[i].to(device)) for s in dcll_slices]
             acc__test_print =  ' '.join(['L{0} {1:1.3}'.format(j,v) for j,v in enumerate(acc_test_only)])
             print(acc__test_print)
@@ -296,7 +294,3 @@ if __name__ == "__main__":
         np.save(args.test_only+'testlabels.npy', labels1h_tests[i])
         np.save(args.test_only+'testinputrate.npy', input_tests[i].reshape(n_iters_test,-1).mean(1).cpu().numpy())
         np.save(args.test_only+'testinput.npy', input_tests[i][:,0:10].cpu().numpy())
-
-
-            
-
