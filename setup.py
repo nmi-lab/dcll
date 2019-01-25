@@ -25,5 +25,8 @@ setup(
     test_suite = 'nose.collector',
     long_description=long_description,
     license='GPLv2',
-    install_requires=["tensorboardX","h5py","tqdm"]
+    install_requires=[
+        "torch>=0.4",
+        "h5py"
+    ]
 )
