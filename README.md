@@ -1,6 +1,6 @@
 # Synaptic Plasticity Dynamics for Deep Continuous Local Learning (DCLL)
 
-This repo contains the pytorch implementation of the DCLL learning rule presented in [this paper](https://arxiv.org/abs/1811.10766).
+This repo contains the [PyTorch](https://pytorch.org/) implementation of the DCLL learning rule presented in [this paper](https://arxiv.org/abs/1811.10766).
 If you use this code in a scientific publication, please include the following reference in your bibliography:
 
 ```
@@ -14,11 +14,12 @@ If you use this code in a scientific publication, please include the following r
 
 ## Install
 
-This repo is a python package.
+This repo is a python package depending on [PyTorch](https://pytorch.org/).
 You can install it in a virtual environment (or locally with `--user`) with the following command:
 
 ```bash
 pip install -e .
+pip install -r requirements.txt
 ```
 
 By using the `-e` option of pip, the files will be symlink'ed to your virtualenv instead of copied.
@@ -35,9 +36,22 @@ The latest requires you to [download the DVS gesture dataset](http://research.ib
 
 ```
 cd data
-ln -s ~/Datasets/DVS/dvs_gestures/DVS\ \ Gesture\ dataset/DvsGesture/ .
+ln -s path_to_dvs_gestures/DVS\ \ Gesture\ dataset/DvsGesture/ .
 ```
+## Browse the results
 
-## Code
+You can browse our results without having to run the code.
+Check out the jupyter notebooks for the [DvsGesture dataset](notebooks/plot_dvs_gestures.ipynb) and the [MNIST dataset](notebooks/plot_mnist.ipynb).
+
+## Usage
 
 The core of the DCLL framework are implemented as torch Modules in `dcll/pytorch_libdcll.py`.
+Since we provide this code as a library, you can reuse the DCLL layers in your own [PyTorch](https://pytorch.org/) code:
+
+```
+import torch
+from dcll.pytorch_libdcll import Conv2dDCLLlayer
+layer = Conv2dDCLLlayer(...)
+```
+
+Have a look in [samples/pytorch_conv3L_mnist.py](samples/pytorch_conv3L_mnist.py) for example usage.

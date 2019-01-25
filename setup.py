@@ -27,6 +27,7 @@ setup(
     license='GPLv2',
     install_requires=[
         "torch>=0.4",
+        "scipy>=1.0",
         "h5py"
     ]
 )
