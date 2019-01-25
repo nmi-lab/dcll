@@ -31,7 +31,7 @@ mapping = { 0 :'Hand Clapping'  ,
 
 class SequenceGenerator(object):
     def __init__(self,
-        filename = 'data/dvs_gestures_events.hdf5',
+        filename = os.path.join(dcll_folder, '../data/dvs_gestures_events.hdf5'),
         group = 'train',
         batch_size = 32,
         chunk_size = 500,
@@ -99,6 +99,8 @@ def gather_gestures_stats(hdf5_grp):
 
 
 def gather_aedat(directory, start_id, end_id, filename_prefix = 'user'):
+    if not os.path.isdir(directory):
+        raise FileNotFoundError("DVS Gestures Dataset not found, looked at: {}".format(directory))
     import glob
     fns = []
     for i in range(start_id,end_id):
@@ -201,7 +203,7 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
 
 def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64], dt = 1000, offset = 0):
     batch_1of_each = {k:range(len(v['labels'].value)) for k,v in hdf5_group.items()}
-    batch_size = np.sum([len(v) for v in batch_1of_each.values()])
+    batch_size = np.sum([len(v) for v in batch_1of_each.values()]).astype(int)
     batch = np.empty([batch_size,T]+size, dtype='float')
     batch_idx_l = np.empty(batch_size, dtype= 'int')
     i = 0
@@ -279,7 +281,11 @@ def create_events_hdf5(hdf5_filename):
 def create_data(filename = os.path.join(dcll_folder, '../data/dvs_gestures_events.hdf5'),
                 batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
     if not os.path.isfile(filename):
+        print("File {} does not exist: converting DvsGesture to h5file".format(filename))
         create_events_hdf5(filename)
+    else:
+        print("File {} exists: not re-converting DvsGesture".format(filename))
+
     strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
     stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
     return strain, stest
