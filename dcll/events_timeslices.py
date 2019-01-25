@@ -52,7 +52,7 @@ def get_binary_frame_np(arr, evs, size = (346,260), ds=1):
     arr[evs[:,1]//ds,evs[:,2]//ds] = 2*evs[:,3]-1
 
 def get_time_surface(device, invtau = 1e-6, size= (346,260,2)):
-    evs = get_event_timeslice(device) 
+    evs = get_event_timeslice(device)
 
     tr = np.zeros(size, 'int64')-np.inf
 
@@ -99,4 +99,3 @@ if __name__ == "__main__":
     dataset = h5py.File('/home/eneftci_local/Projects/share/data/massiset/massiset_sparse.hdf5', 'r')
     evs = dataset.get('backpack')['data_train'].value
     cevs = chunk_evs(evs,chunk_size=500,deltat=1000, ds = 4, size = [304//4, 240//4])
-
