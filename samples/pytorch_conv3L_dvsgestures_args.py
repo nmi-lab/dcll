@@ -22,16 +22,18 @@ parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='di
 parser.add_argument('--spiking', type=bool, default=True, metavar='N', help='Spiking')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)') 
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
-parser.add_argument('--lr', type=float, default=1e-6, metavar='N', help='learning rate (Adamax)')
+parser.add_argument('--lr', type=float, default=5e-7, metavar='N', help='learning rate (Adamax)')
 parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
-parser.add_argument('--netscale', type=float, default=1.0, metavar='N', help='scale network size')
+parser.add_argument('--netscale', type=float, default=.5, metavar='N', help='scale network size')
 parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
+parser.add_argument('--alpharp', type=float, default=.65, metavar='N', help='Time constant for refractory period')
 parser.add_argument('--beta', type=float, default=.95, metavar='N', help='Beta2 parameters for Adamax')
 parser.add_argument('--arp', type=float, default=1, metavar='N', help='Absolute refractory period in ticks')
 parser.add_argument('--lc_ampl', type=float, default=.5, metavar='N', help='magnitude of local classifier init')
 parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
 parser.add_argument('--test_only', type=str, default='',  help='Only test using predefined parameters found under provided directory')
 parser.add_argument('--test_offset', type=int, default=0,  help='offset test sample')
+parser.add_argument('--random_tau', action='store_true', default=False,  help='randomize time constants in convolutional layers')
 
 args = parser.parse_args()
 #args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -61,7 +63,8 @@ out_channels_5 = int(1024*args.netscale)
 out_channels_6 = int(1024*args.netscale)
 target_size = 11
 act=nn.Sigmoid()
-                
+#aa = nn.Hardtanh(min_val=0)
+#act=lambda x: aa((x/10+.5))
         
 layer1 = Conv2dDCLLlayer(
         in_channels,
@@ -74,12 +77,13 @@ layer1 = Conv2dDCLLlayer(
         kernel_size=7,
         alpha = args.alpha,
         alphas = args.alphas,
-        alpharp = .65,
+        alpharp = args.alpharp,
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
         spiking = args.spiking,
-        lc_ampl = args.lc_ampl).to(device)
+        lc_ampl = args.lc_ampl,
+        random_tau = args.random_tau).to(device)
 
 layer2 = Conv2dDCLLlayer(
         in_channels = layer1.out_channels,
@@ -91,12 +95,13 @@ layer2 = Conv2dDCLLlayer(
         kernel_size=7,
         alpha = args.alpha,
         alphas = args.alphas,
-        alpharp = .65,
+        alpharp = args.alpharp,
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
         spiking = args.spiking,
-        lc_ampl = args.lc_ampl).to(device)
+        lc_ampl = args.lc_ampl,
+        random_tau = args.random_tau).to(device)
 
 layer3 = Conv2dDCLLlayer(
         in_channels = layer2.out_channels,
@@ -108,66 +113,16 @@ layer3 = Conv2dDCLLlayer(
         kernel_size=7,
         alpha = args.alpha,
         alphas = args.alphas,
-        alpharp = .65,
+        alpharp = args.alpharp,
         wrp = args.arp,
         act = act,
         lc_dropout = .5,
         spiking = args.spiking,
-        lc_ampl = args.lc_ampl).to(device)
+        lc_ampl = args.lc_ampl,
+        random_tau = args.random_tau,
+        output_layer=False).to(device)
 
-layer4 = Conv2dDCLLlayer(
-        in_channels = layer3.out_channels,
-        out_channels = out_channels_4,
-        im_dims = layer3.get_output_shape(),
-        target_size=target_size,
-        pooling=1,
-        padding=2,
-        kernel_size=7,
-        alpha = args.alpha,
-        alphas = args.alphas,
-        alpharp = .65,
-        wrp = args.arp,
-        act = act,
-        lc_dropout = .5,
-        spiking = args.spiking,
-        lc_ampl = args.lc_ampl
-        ).to(device)
 
-layer5 = Conv2dDCLLlayer(
-        in_channels = layer4.out_channels,
-        out_channels = out_channels_5,
-        im_dims = layer4.get_output_shape(),
-        target_size=target_size,
-        pooling=1,
-        padding=0,
-        kernel_size=1,
-        alpha = args.alpha,
-        alphas = args.alphas,
-        alpharp = .65,
-        wrp = args.arp,
-        act = act,
-        lc_dropout = .25,
-        spiking = args.spiking,
-        lc_ampl = args.lc_ampl
-        ).to(device)
-
-layer6 = Conv2dDCLLlayer(
-        in_channels = layer5.out_channels,
-        out_channels = out_channels_6,
-        im_dims = layer5.get_output_shape(),
-        target_size=target_size,
-        pooling=1,
-        padding=0,
-        kernel_size=1,
-        alpha = args.alpha,
-        alphas = args.alphas,
-        alpharp = .65,
-        wrp = args.arp,
-        act = act,
-        lc_dropout = .25,
-        spiking = args.spiking,
-        lc_ampl = args.lc_ampl
-        ).to(device)
 
 #Adamax parameters { 'betas' : [.0, .99]}
 opt = optim.Adamax
@@ -177,7 +132,7 @@ loss = torch.nn.SmoothL1Loss
 #loss = torch.nn.CrossEntropyLoss
 #opt_param = {'lr':3e-4}
 
-dcll_slices = [None for i in range(6)]
+dcll_slices = [None for i in range(3)]
 dcll_slices[0] = DCLLClassification(
         dclllayer = layer1,
         name = 'conv2d_layer1',
@@ -201,36 +156,6 @@ dcll_slices[1] = DCLLClassification(
 dcll_slices[2] = DCLLClassification(
         dclllayer = layer3,
         name = 'conv2d_layer3',
-        batch_size = batch_size,
-        loss = loss,
-        optimizer = opt,
-        kwargs_optimizer = opt_param,
-        collect_stats = True,
-        burnin = 50)
-
-dcll_slices[3] = DCLLClassification(
-        dclllayer = layer4,
-        name = 'conv2d_layer4',
-        batch_size = batch_size,
-        loss = loss,
-        optimizer = opt,
-        kwargs_optimizer = opt_param,
-        collect_stats = True,
-        burnin = 50)
-
-dcll_slices[4] = DCLLClassification(
-        dclllayer = layer5,
-        name = 'conv2d_layer5',
-        batch_size = batch_size,
-        loss = loss,
-        optimizer = opt,
-        kwargs_optimizer = opt_param,
-        collect_stats = True,
-        burnin = 50)
-
-dcll_slices[5] = DCLLClassification(
-        dclllayer = layer6,
-        name = 'conv2d_layer6',
         batch_size = batch_size,
         loss = loss,
         optimizer = opt,
@@ -271,7 +196,7 @@ if __name__ == "__main__":
     from tensorboardX import SummaryWriter
     import datetime,socket,os
     current_time = datetime.datetime.now().strftime('%b%d_%H-%M-%S')
-    comment=str(args)[10:].replace(' ', '_')
+    comment='' #str(args)[10:].replace(' ', '_')
     log_dir = os.path.join('runs_args/', 'pytorch_conv3L_dvsgestures_args_', current_time + '_' + socket.gethostname() +'_' + comment, )
     print(log_dir)
 
@@ -289,12 +214,19 @@ if __name__ == "__main__":
 
     if args.test_only=='':
         if not args.no_save:
-            d = mksavedir()
+            d = mksavedir(pre='Results_dvsgestures/')
             annotate(d, text = log_dir, filename= 'log_filename')
             annotate(d, text = str(args), filename= 'args')
             save_source(d)
         for epoch in range(n_epochs):
             print(epoch)
+            if ((epoch+1)%1000)==0:
+                dcll_slices[0].optimizer.param_groups[-1]['lr']/=5
+                dcll_slices[1].optimizer.param_groups[-1]['lr']/=5
+                dcll_slices[2].optimizer.param_groups[-1]['lr']/=5
+                #dcll_slices[2].optimizer2.param_groups[-1]['lr']/=5
+                print("Adjusted parameters")
+
             input, labels = gen_train.next()
             input = torch.Tensor(input.swapaxes(0,1)).reshape(n_iters,batch_size,in_channels,im_width,im_height)
             labels1h = torch.Tensor(labels)
@@ -302,12 +234,9 @@ if __name__ == "__main__":
             [s.init(batch_size, init_states = False) for s in dcll_slices]
             
             for iter in tqdm(range(n_iters)):
-                output1 = dcll_slices[0].train(input[iter].to(device),labels1h[iter].to(device))[0]
-                output2 = dcll_slices[1].train(output1,    labels1h[iter].to(device))[0]
-                output3 = dcll_slices[2].train(output2,    labels1h[iter].to(device))[0]
-                output4 = dcll_slices[3].train(output3,    labels1h[iter].to(device))[0]
-                output5 = dcll_slices[4].train(output4,    labels1h[iter].to(device))[0]
-                output6 = dcll_slices[5].train(output5,    labels1h[iter].to(device))[0]
+                output1 = dcll_slices[0].train_dcll(input[iter].to(device),labels1h[iter].to(device), regularize = .001)[0]
+                output2 = dcll_slices[1].train_dcll(output1,    labels1h[iter].to(device)           , regularize = .001)[0]
+                output3 = dcll_slices[2].train_dcll(output2,    labels1h[iter].to(device)           , regularize = .001)[0]
 
             if (epoch%n_test_interval)==1:
 
@@ -319,9 +248,6 @@ if __name__ == "__main__":
                         output1 = dcll_slices[0].forward(input_tests[i][iter].to(device))[0]
                         output2 = dcll_slices[1].forward(output1   )[0]
                         output3 = dcll_slices[2].forward(output2   )[0]
-                        output4 = dcll_slices[3].forward(output3   )[0]
-                        output5 = dcll_slices[4].forward(output4   )[0]
-                        output6 = dcll_slices[5].forward(output5   )[0]
 
                     acc_test[epoch//n_test_interval,i,:] = [ s.accuracy(labels1h_tests[i].to(device)) for s in dcll_slices]
                     acc__test_print =  ' '.join(['L{0} {1:1.3}'.format(i,v) for i,v in enumerate(acc_test[epoch//n_test_interval,i])])
@@ -350,9 +276,6 @@ if __name__ == "__main__":
                 output41,output42,output43,output44 = dcll_slices[0].forward(input_tests[i][iter].to(device))
                 output2 = dcll_slices[1].forward(output41   )[0]
                 output3 = dcll_slices[2].forward(output2   )[0]
-                output4 = dcll_slices[3].forward(output3   )[0]
-                output5 = dcll_slices[4].forward(output3   )[0]
-                output6 = dcll_slices[5].forward(output3   )[0]
                 if i==0: doutput1.append(output41[0].detach().cpu().numpy())
                 if i==0: doutput2.append(output42[0].detach().cpu().numpy())
                 if i==0: doutput3.append(output43[0].detach().cpu().numpy())

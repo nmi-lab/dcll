@@ -183,14 +183,17 @@ def next(hdf5_group, stats, batch_size = 32, T = 500, n_classes = 11, ds = 2, si
     np.random.shuffle(batch_idx)
     batch_idx = batch_idx[:batch_size]
     batch_idx_l = np.empty(batch_size, dtype= 'int')
-
     for i, b in (enumerate(batch_idx)):
         dset = hdf5_group[str(b)]
         labels = dset['labels'].value
-        start_time, label = compute_start_time(labels, pad = 2*T*dt)
-        batch_idx_l[i] = label-1
-        #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
-        batch[i] = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
+        cand_batch = -1
+        while cand_batch is -1: #catches some mislabeled data
+            start_time, label = compute_start_time(labels, pad = 2*T*dt)
+            batch_idx_l[i] = label-1
+            #print(str(i),str(b),mapping[batch_idx_l[i]], start_time)
+            cand_batch = get_event_slice(dset['time'].value, dset['data'], start_time, T, ds=ds, size=size, dt=dt)
+        batch[i] = cand_batch
+        
     #print(batch_idx_l)
     return batch, expand_targets(one_hot(batch_idx_l, n_classes), T).astype('float')
 
@@ -222,9 +225,13 @@ def next_1ofeach(hdf5_group, T = 500, n_classes = 11, ds = 2, size = [2, 64, 64]
 #    return start_time
 
 def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 1000):
-    idx_beg = find_first(times, start_time)
-    idx_end = find_first(times[idx_beg:], start_time+T*dt)+idx_beg
-    return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=dt, chunk_size=T, size = size, ds = ds)
+    try:
+        idx_beg = find_first(times, start_time)
+        idx_end = find_first(times[idx_beg:], start_time+T*dt)+idx_beg
+        return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=dt, chunk_size=T, size = size, ds = ds)
+    except IndexError:
+        print("Empty batch found, returning -1")
+        return -1
 
 def create_events_hdf5():
     fns_train = gather_aedat('/share/data/DvsGesture/aedat/',1,24)
@@ -268,8 +275,8 @@ def create_events_hdf5():
         f['stats'][:] = stats
     
 def create_data(batch_size = 64 , chunk_size = 500, size = [2, 32, 32], ds = 4, dt = 1000):
-    strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
-    stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= 1000)
+    strain = SequenceGenerator(group='train', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
+    stest = SequenceGenerator(group='test', batch_size = batch_size, chunk_size = chunk_size, size = size, ds = ds, dt= dt)
     return strain, stest
 
 def plot_gestures_imshow(images, labels, nim=11, avg=50, do1h = True, transpose=False):

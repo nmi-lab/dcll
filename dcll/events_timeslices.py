@@ -88,7 +88,7 @@ def chunk_evs_pol(times, addrs, deltat=1000, chunk_size=500, size = [2,304,240],
         idx_end += find_first(times[idx_end:], t)
         if idx_end>idx_start:
             ee = addrs[idx_start:idx_end]
-            chunks[i,ee[:,2],ee[:,0]//ds,ee[:,1]//ds] = 1
+            chunks[i,ee[:,2],ee[:,0]//ds,ee[:,1]//ds] += 1
         idx_start = idx_end
     return chunks
 
