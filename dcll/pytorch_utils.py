@@ -2,7 +2,6 @@ import torch
 import numpy as np
 from collections import namedtuple
 import matplotlib.pyplot as plt
-import cv2
 import torchvision.utils as vutils
 import matplotlib.animation as animation
 
@@ -145,4 +144,3 @@ class NetworkDumper(object):
         hook = ForwardHook(self.writer, title, t)
         # register and return the handle
         return self.model.register_forward_hook(hook)
-
