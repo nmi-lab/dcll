@@ -128,7 +128,6 @@ def get_mnist_loader(batch_size, train, perm=0., Nparts=1, part=0, seed=0, taski
     return loader
 
 def image2spiketrain(x,y,gain=50,min_duration=None, max_duration=500):
-    y = to_one_hot(y, 10)
     if min_duration is None:
         min_duration = max_duration-1
     batch_size = x.shape[0]
