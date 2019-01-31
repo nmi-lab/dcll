@@ -1,4 +1,4 @@
-#!/bin/python
+#!/usr/bin/env python
 #-----------------------------------------------------------------------------
 # File Name : experiment_tools.py
 # Author: Emre Neftci

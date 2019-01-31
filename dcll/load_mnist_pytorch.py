@@ -4,7 +4,7 @@ from dcll.npamlib import spiketrains
 
 input_shape = [28,28,1]
 
-import numpy as np 
+import numpy as np
 from torchvision import datasets, models, transforms, utils
 import torch
 from torch.utils.data.dataloader import _DataLoaderIter, DataLoader
@@ -33,7 +33,7 @@ def preprocess_dataset(dataset):
     tl = torch.empty(torch.Size([len(dataset)])+y.shape, dtype = y.dtype)
     for idx in tqdm.tqdm(range(len(dataset)), desc = "Pre-processing dataset"):
         td[idx], tl[idx] = dataset[idx]
-        
+
     if dataset.train:
         dataset.train_data, dataset.train_labels = td, tl
     else:
@@ -41,10 +41,10 @@ def preprocess_dataset(dataset):
 
     def get(idx):
         if dataset.train:
-            return dataset.train_data[idx], dataset.train_labels[idx] 
+            return dataset.train_data[idx], dataset.train_labels[idx]
         else:
-            return dataset.test_data[idx], dataset.test_labels[idx] 
-        
+            return dataset.test_data[idx], dataset.test_labels[idx]
+
     dataset.preprocessed_get = get
     dataset.transform = None
     return dataset
@@ -99,7 +99,7 @@ def partition_dataset(dataset, Nparts=600, part=0):
 
 def get_mnist_loader(batch_size, train, perm=0., Nparts=1, part=0, seed=0, taskid=0, pre_processed=True, **loader_kwargs):
     """Builds and returns Dataloader for MNIST and SVHN dataset."""
-    
+
     transform = transforms.Compose([
                     transforms.Grayscale(),
                     transforms.ToTensor(),
@@ -117,7 +117,7 @@ def get_mnist_loader(batch_size, train, perm=0., Nparts=1, part=0, seed=0, taski
         DL = DataLoaderPreProcessed
     else:
         DL = DataLoader
-    
+
     loader = DL(dataset=dataset,
                 batch_size=batch_size,
                 shuffle=train,
