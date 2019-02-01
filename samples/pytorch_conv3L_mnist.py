@@ -247,12 +247,11 @@ if __name__ == "__main__":
                                                        min_duration=n_iters-1,
                                                        max_duration=n_iters,
                                                        gain=100)
-        input_spikes = torch.Tensor(input_spikes).to(device).reshape(n_iters,
-                                                                     args.batch_size,
-                                                                     *im_dims)
+        input_spikes = torch.Tensor(input_spikes).to(device)
         labels_spikes = torch.Tensor(labels_spikes).to(device)
+
         ref_input = torch.Tensor(input).to(device).reshape(
-            args.batch_size, *im_dims
+            -1, *im_dims
         )
         ref_label = torch.Tensor(labels).to(device)
 
@@ -273,16 +272,14 @@ if __name__ == "__main__":
                                                            max_duration=n_iters_test,
                                                            gain=100)
                 try:
-                    test_input = torch.Tensor(test_input).to(device).reshape(n_iters_test,
-                                                                             args.batch_size,
-                                                                             *im_dims)
+                    test_input = torch.Tensor(test_input).to(device)
                 except RuntimeError as e:
                     print("Exception: " + str(e) + ". Try to decrease your batch_size with the --batch_size argument.")
                     raise
 
                 test_labels1h = torch.Tensor(test_labels).to(device)
                 test_ref_input = torch.Tensor(test_data[0]).to(device).reshape(
-                    args.batch_size, *im_dims
+                    -1, *im_dims
                 )
                 test_ref_label = torch.Tensor(test_data[1]).to(device)
 
