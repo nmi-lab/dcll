@@ -123,11 +123,10 @@ class ConvNetwork(torch.nn.Module):
                                     kernel_size=conf[1], padding=conf[2], pooling=conf[3],
                                     im_dims=inp[1:3], # height, width
                                     target_size=target_size,
-                                    alpha=args.alpha, alphas=args.alphas, act = act,
-                                    lc_ampl = args.lc_ampl,
+                                    alpha=args.alpha, alphas=args.alphas, alpharp = args.alpharp,
+                                    wrp = args.arp, act = act, lc_ampl = args.lc_ampl,
                                     random_tau = args.random_tau,
-                                    alpharp = args.alpharp,
-                                    wrp = args.arp,
+                                    spiking = True,
                                     lc_dropout = .5
             ).to(device).init_hiddens(batch_size)
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
@@ -240,7 +239,12 @@ if __name__ == "__main__":
             net.dcll_slices[2].optimizer.param_groups[-1]['lr']/=2
             print("Adjusting learning rates")
 
-        input, labels = next(gen_train)
+        try:
+            input, labels = next(gen_train)
+        except StopIteration:
+            gen_train = iter(gen_train)
+            input, labels = next(gen_train)
+
         labels = to_one_hot(labels, 10)
 
         input_spikes, labels_spikes = image2spiketrain(input, labels,
