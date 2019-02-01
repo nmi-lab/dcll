@@ -226,7 +226,8 @@ if __name__ == "__main__":
     acc_test_ref = np.empty([n_tests_total, n_test])
 
     from dcll.load_mnist_pytorch import *
-    gen_train = iter(get_mnist_loader(args.batch_size, train=True, perm=0., Nparts=1, part=0, seed=0, taskid=0, pre_processed=True))
+    train_data = get_mnist_loader(args.batch_size, train=True, perm=0., Nparts=1, part=0, seed=0, taskid=0, pre_processed=True)
+    gen_train = iter(train_data)
     gen_test = iter(get_mnist_loader(args.batch_size, train=False, perm=0., Nparts=1, part=1, seed=0, taskid=0, pre_processed=True))
 
     all_test_data = [ next(gen_test) for i in range(n_test) ]
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         try:
             input, labels = next(gen_train)
         except StopIteration:
-            gen_train = iter(gen_train)
+            gen_train = iter(train_data)
             input, labels = next(gen_train)
 
         labels = to_one_hot(labels, 10)
@@ -263,10 +264,9 @@ if __name__ == "__main__":
         # Train
         net.train()
         ref_net.train()
-        for iter in range(n_iters):
-            net.learn(x=input_spikes[iter], labels=labels_spikes[iter])
-            if iter > burnin:
-                ref_net.learn(x=ref_input, labels=ref_label)
+        for sim_iteration in range(n_iters):
+            net.learn(x=input_spikes[sim_iteration], labels=labels_spikes[sim_iteration])
+            ref_net.learn(x=ref_input, labels=ref_label)
 
         if (epoch % args.n_test_interval)==0:
             for i, test_data in enumerate(all_test_data):
@@ -291,8 +291,8 @@ if __name__ == "__main__":
                 net.eval()
                 ref_net.eval()
                 # Test
-                for iter in range(n_iters_test):
-                    net.test(x = test_input[iter])
+                for sim_iteration in range(n_sim_iterations_test):
+                    net.test(x = test_input[sim_iteration])
 
                 ref_net.test(test_ref_input)
 
