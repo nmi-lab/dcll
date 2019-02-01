@@ -291,7 +291,7 @@ if __name__ == "__main__":
                 net.eval()
                 ref_net.eval()
                 # Test
-                for sim_iteration in range(n_sim_iterations_test):
+                for sim_iteration in range(n_iters_test):
                     net.test(x = test_input[sim_iteration])
 
                 ref_net.test(test_ref_input)
