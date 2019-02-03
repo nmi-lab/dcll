@@ -24,6 +24,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='DCLL for MNIST')
     parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size for training (default: 128)')
+    parser.add_argument('--batch_size_test', type=int, default=512, metavar='N', help='input batch size for testing (default: 512)')
     parser.add_argument('--n_epochs', type=int, default=20000, metavar='N', help='number of epochs to train (default: 20000)')
     parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
     #parser.add_argument('--no-cuda', action='store_true', default=False, help='enables CUDA training')
@@ -156,15 +157,15 @@ class ConvNetwork(torch.nn.Module):
     def learn(self, x, labels):
         spikes = x
         for i, sl in enumerate(self.dcll_slices):
-            spikes, _, pv, _, _ = sl.train_dcll(spikes, labels)
+            spikes, _, pv, _, _ = sl.train_dcll(spikes, labels, regularize = .001)
 
     def test(self, x):
         spikes = x
         for sl in self.dcll_slices:
             spikes, _, _, _ = sl.forward(spikes)
 
-    def reset(self):
-        [s.init(self.batch_size, init_states = False) for s in self.dcll_slices]
+    def reset(self, init_states = False):
+        [s.init(self.batch_size, init_states = init_states) for s in self.dcll_slices]
     def write_stats(self, writer, epoch, comment=""):
         [s.write_stats(writer, label = 'test'+comment+'/', epoch = epoch) for s in self.dcll_slices]
 
@@ -186,8 +187,8 @@ if __name__ == "__main__":
     n_iters_test = args.n_iters_test
     im_dims = (1, 28, 28)
     target_size = 10
-    # number of test samples: n_test * batch_size
-    n_test = np.ceil(float(args.n_test_samples)/args.batch_size).astype(int)
+    # number of test samples: n_test * batch_size_test
+    n_test = np.ceil(float(args.n_test_samples)/args.batch_size_test).astype(int)
 
     opt = torch.optim.Adamax
     opt_param = {'lr':args.lr, 'betas' : [.0, args.beta]}
@@ -206,6 +207,7 @@ if __name__ == "__main__":
                       act=torch.nn.Sigmoid(),
                       loss=loss, opt=opt, opt_param=opt_param, burnin=burnin
     )
+    net.reset(True)
 
     ref_net = ReferenceConvNetwork(im_dims, convs, loss, opt, opt_param)
 
@@ -228,7 +230,7 @@ if __name__ == "__main__":
     from dcll.load_mnist_pytorch import *
     train_data = get_mnist_loader(args.batch_size, train=True, perm=0., Nparts=1, part=0, seed=0, taskid=0, pre_processed=True)
     gen_train = iter(train_data)
-    gen_test = iter(get_mnist_loader(args.batch_size, train=False, perm=0., Nparts=1, part=1, seed=0, taskid=0, pre_processed=True))
+    gen_test = iter(get_mnist_loader(args.batch_size_test, train=False, perm=0., Nparts=1, part=1, seed=0, taskid=0, pre_processed=True))
 
     all_test_data = [ next(gen_test) for i in range(n_test) ]
     all_test_data = [ (samples, to_one_hot(labels, 10)) for (samples, labels) in all_test_data ]
@@ -278,7 +280,7 @@ if __name__ == "__main__":
                 try:
                     test_input = torch.Tensor(test_input).to(device)
                 except RuntimeError as e:
-                    print("Exception: " + str(e) + ". Try to decrease your batch_size with the --batch_size argument.")
+                    print("Exception: " + str(e) + ". Try to decrease your batch_size_test with the --batch_size_test argument.")
                     raise
 
                 test_labels1h = torch.Tensor(test_labels).to(device)
