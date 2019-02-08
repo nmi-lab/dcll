@@ -31,7 +31,6 @@ var/
 .installed.cfg
 *.egg
 Results*
-Paper_results*
 runs*
 samples/data*
 __gen__*
