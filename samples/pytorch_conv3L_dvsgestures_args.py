@@ -14,6 +14,7 @@ from dcll.experiment_tools import *
 from dcll.load_dvsgestures_sparse import *
 import argparse
 from tqdm import tqdm
+import pickle
 
 parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
 parser.add_argument('--batchsize', type=int, default=80, metavar='N', help='input batch size for training (default: 128)')
@@ -216,6 +217,9 @@ if __name__ == "__main__":
             annotate(d, text = log_dir, filename= 'log_filename')
             annotate(d, text = str(args), filename= 'args')
             save_source(d)
+            with open(os.path.join(d, 'args.pkl'), 'wb') as fp:
+                pickle.dump(vars(args), fp)
+
         for epoch in range(n_epochs):
             print(epoch)
             if ((epoch+1)%1000)==0:
@@ -254,7 +258,6 @@ if __name__ == "__main__":
 
         if not args.no_save:
             np.save(d+'/acc_test.npy', acc_test)
-            save(d,args,'args.pkl')
             annotate(d, text = "", filename = "best result")
             save_dcllslices(d, dcll_slices)
 
