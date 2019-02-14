@@ -6,7 +6,7 @@
 # Last Modified : Sun 29 Jul 2018 01:39:06 PM PDT
 #
 # Copyright : (c)
-# Licence : GPLv2
+# Licence : Apache License, Version 2.0
 #-----------------------------------------------------------------------------
 import struct
 import numpy as np

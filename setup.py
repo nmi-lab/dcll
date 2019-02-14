@@ -24,7 +24,7 @@ setup(
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     test_suite = 'nose.collector',
     long_description=long_description,
-    license='GPLv2',
+    license='Apache License 2.0',
     install_requires=[
         "torch>=0.4",
         "scipy>=1.0",

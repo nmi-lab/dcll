@@ -7,7 +7,7 @@
 # Last Modified : Fri 04 Nov 2016 12:44:30 AM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci, Ryan Stokes
-# Licence : GPLv2
+# Licence : Apache License, Version 2.0
 #----------------------------------------------------------------------------- 
 import numpy as np
 import matplotlib.pyplot as plt

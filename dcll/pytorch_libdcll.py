@@ -7,7 +7,7 @@
 # Last Modified : Mon 12 Nov 2018 03:11:40 PM PST
 #
 # Copyright : (c) UC Regents, Emre Neftci
-# Licence : GPLv2
+# Licence : Apache License, Version 2.0
 #-----------------------------------------------------------------------------
 import torch
 import torch.nn as nn

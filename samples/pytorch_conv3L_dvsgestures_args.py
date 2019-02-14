@@ -7,7 +7,7 @@
 # Last Modified : Mon 01 Oct 2018 04:48:59 PM PDT
 #
 # Copyright : (c) UC Regents, Emre Neftci
-# Licence : GPLv2
+# Licence : Apache License, Version 2.0
 #-----------------------------------------------------------------------------
 from dcll.pytorch_libdcll import *
 from dcll.experiment_tools import *

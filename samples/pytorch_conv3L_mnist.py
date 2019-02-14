@@ -7,7 +7,7 @@
 # Last Modified :
 #
 # Copyright : (c) UC Regents, Emre Neftci
-# Licence : GPLv2
+# Licence : Apache License, Version 2.0
 #-----------------------------------------------------------------------------
 import torch
 from dcll.pytorch_libdcll import Conv2dDCLLlayer, DenseDCLLlayer, device, DCLLClassification
