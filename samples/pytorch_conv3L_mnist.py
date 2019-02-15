@@ -120,7 +120,7 @@ class ConvNetwork(torch.nn.Module):
         self.batch_size = batch_size
 
         def make_conv(inp, conf):
-            layer = Conv2dDCLLlayer(in_channels = inp[0], out_channels = conf[0],
+            layer = Conv2dDCLLlayer(in_channels = inp[0], out_channels = int(conf[0] * args.netscale),
                                     kernel_size=conf[1], padding=conf[2], pooling=conf[3],
                                     im_dims=inp[1:3], # height, width
                                     target_size=target_size,
@@ -198,9 +198,9 @@ if __name__ == "__main__":
 
     burnin = 50
     # format: (out_channels, kernel_size, padding, pooling)
-    convs = [ (8, 7, 2, 2),
-              (12, 7, 2, 1),
-              (16, 7, 2, 2) ]
+    convs = [ (16, 7, 2, 2),
+              (24, 7, 2, 1),
+              (32, 7, 2, 2) ]
     # convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1), (64, 3, 3, 1) ]
 
     net = ConvNetwork(args, im_dims, args.batch_size, convs, target_size,
