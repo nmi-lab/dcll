@@ -17,24 +17,25 @@ from tqdm import tqdm
 import pickle
 
 parser = argparse.ArgumentParser(description='DCLL for DVS gestures')
-parser.add_argument('--batchsize', type=int, default=80, metavar='N', help='input batch size for training (default: 128)')
-parser.add_argument('--epochs', type=int, default=2000, metavar='N', help='number of epochs to train (default: 10)')
+parser.add_argument('--batchsize', type=int, default=72, metavar='N', help='input batch size for training')
+parser.add_argument('--epochs', type=int, default=4500, metavar='N', help='number of epochs to train')
 parser.add_argument('--no_save', type=bool, default=False, metavar='N', help='disables saving into Results directory')
 parser.add_argument('--spiking', type=bool, default=True, metavar='N', help='Spiking')
-parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed')
 parser.add_argument('--testinterval', type=int, default=20, metavar='N', help='how epochs to run before testing')
-parser.add_argument('--lr', type=float, default=5e-7, metavar='N', help='learning rate (Adamax)')
-parser.add_argument('--alpha', type=float, default=.9, metavar='N', help='Time constant for neuron')
-parser.add_argument('--netscale', type=float, default=.5, metavar='N', help='scale network size')
-parser.add_argument('--alphas', type=float, default=.87, metavar='N', help='Time constant for synapse')
+parser.add_argument('--lr', type=float, default=1e-9, metavar='N', help='learning rate for Adamax')
+parser.add_argument('--alpha', type=float, default=.97, metavar='N', help='Time constant for neuron')
+parser.add_argument('--netscale', type=float, default=1., metavar='N', help='scale network size')
+parser.add_argument('--alphas', type=float, default=.92, metavar='N', help='Time constant for synapse')
 parser.add_argument('--alpharp', type=float, default=.65, metavar='N', help='Time constant for refractory period')
 parser.add_argument('--beta', type=float, default=.95, metavar='N', help='Beta2 parameters for Adamax')
-parser.add_argument('--arp', type=float, default=1, metavar='N', help='Absolute refractory period in ticks')
+parser.add_argument('--arp', type=float, default=1., metavar='N', help='Absolute refractory period in ticks')
 parser.add_argument('--lc_ampl', type=float, default=.5, metavar='N', help='magnitude of local classifier init')
 parser.add_argument('--valid', action='store_true', default=False, help='Validation mode (only a portion of test cases will be used)')
 parser.add_argument('--test_only', type=str, default='',  help='Only test using predefined parameters found under provided directory')
 parser.add_argument('--test_offset', type=int, default=0,  help='offset test sample')
-parser.add_argument('--random_tau', action='store_true', default=False,  help='randomize time constants in convolutional layers')
+parser.add_argument('--random_tau', type=bool, default=True,  help='randomize time constants in convolutional layers')
+parser.add_argument('--n_iters_test', type=int, default=1800, metavar='N', help='for how many ms do we present a sample during classification')
 
 args = parser.parse_args()
 #args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -51,17 +52,17 @@ n_test_interval = args.testinterval
 n_tests_total = n_epochs//n_test_interval+1
 batch_size = args.batchsize
 n_iters = 500
-n_iters_test = 1800
+n_iters_test = args.n_iters_test
 dt = 1000 #us
 in_channels = 2
 ds = 4
 im_dims = im_width, im_height = (128//ds, 128//ds)
-out_channels_1 = int(128*args.netscale)
-out_channels_2 = int(256*args.netscale)
-out_channels_3 = int(256*args.netscale)
-out_channels_4 = int(512*args.netscale)
-out_channels_5 = int(1024*args.netscale)
-out_channels_6 = int(1024*args.netscale)
+out_channels_1 = int(64*args.netscale)
+out_channels_2 = int(128*args.netscale)
+out_channels_3 = int(128*args.netscale)
+out_channels_4 = int(256*args.netscale)
+out_channels_5 = int(512*args.netscale)
+out_channels_6 = int(512*args.netscale)
 target_size = 11
 act=nn.Sigmoid()
 
