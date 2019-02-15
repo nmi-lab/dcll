@@ -54,7 +54,7 @@ class ReferenceConvNetwork(torch.nn.Module):
         def make_conv(inp, conf):
             layer = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels=inp[0],
-                                out_channels=conf[0],
+                                out_channels=int(conf[0] * args.netscale),
                                 kernel_size=conf[1],
                                 padding=conf[2]),
                 torch.nn.ReLU(),
@@ -198,9 +198,9 @@ if __name__ == "__main__":
 
     burnin = 50
     # format: (out_channels, kernel_size, padding, pooling)
-    convs = [ (8 * args.netscale, 7, 2, 2),
-              (12 * args.netscale, 7, 2, 1),
-              (16 * args.netscale, 7, 2, 2) ]
+    convs = [ (8, 7, 2, 2),
+              (12, 7, 2, 1),
+              (16, 7, 2, 2) ]
     # convs = [ (16, 7, 3, 2), (24, 7, 3, 2), (32, 7, 3, 1), (64, 3, 3, 1) ]
 
     net = ConvNetwork(args, im_dims, args.batch_size, convs, target_size,
