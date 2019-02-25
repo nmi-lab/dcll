@@ -119,7 +119,7 @@ class ConvNetwork(torch.nn.Module):
         super(ConvNetwork, self).__init__()
         self.batch_size = batch_size
 
-        def make_conv(inp, conf):
+        def make_conv(inp, conf, is_output_layer=False):
             layer = Conv2dDCLLlayer(in_channels = inp[0], out_channels = int(conf[0] * args.netscale),
                                     kernel_size=conf[1], padding=conf[2], pooling=conf[3],
                                     im_dims=inp[1:3], # height, width
@@ -128,7 +128,8 @@ class ConvNetwork(torch.nn.Module):
                                     wrp = args.arp, act = act, lc_ampl = args.lc_ampl,
                                     random_tau = args.random_tau,
                                     spiking = True,
-                                    lc_dropout = .5
+                                    lc_dropout = .5,
+                                    output_layer = is_output_layer
             ).to(device).init_hiddens(batch_size)
             return layer, torch.Size([layer.out_channels]) + layer.output_shape
 
@@ -136,7 +137,7 @@ class ConvNetwork(torch.nn.Module):
 
         self.layer1, n = make_conv(n, convs[0])
         self.layer2, n = make_conv(n, convs[1])
-        self.layer3, n = make_conv(n, convs[2])
+        self.layer3, n = make_conv(n, convs[2], True)
 
         self.dcll_slices = []
         for layer, name in zip([self.layer1, self.layer2, self.layer3],
@@ -157,7 +158,7 @@ class ConvNetwork(torch.nn.Module):
     def learn(self, x, labels):
         spikes = x
         for i, sl in enumerate(self.dcll_slices):
-            spikes, _, pv, _, _ = sl.train_dcll(spikes, labels, regularize = .001)
+            spikes, _, pv, _, _ = sl.train_dcll(spikes, labels, regularize = False)
 
     def test(self, x):
         spikes = x
@@ -240,6 +241,7 @@ if __name__ == "__main__":
             net.dcll_slices[0].optimizer.param_groups[-1]['lr']/=2
             net.dcll_slices[1].optimizer.param_groups[-1]['lr']/=2
             net.dcll_slices[2].optimizer.param_groups[-1]['lr']/=2
+            net.dcll_slices[2].optimizer2.param_groups[-1]['lr']/=2
             print("Adjusting learning rates")
 
         try:
