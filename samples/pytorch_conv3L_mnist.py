@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--netscale', type=float, default=1., metavar='N', help='scale network size')
     parser.add_argument('--comment', type=str, default='',
                         help='comment to name tensorboard files')
-    parser.add_argument('--output', type=str, default='Results/',
+    parser.add_argument('--output', type=str, default='Results_mnist/',
                         help='folder name for the results')
     return parser.parse_args()
 

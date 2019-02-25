@@ -294,7 +294,6 @@ if __name__ == "__main__":
         np.save(args.test_only+'clout1.npy',np.array(dcll_slices[0].clout))
         np.save(args.test_only+'clout2.npy',np.array(dcll_slices[1].clout))
         np.save(args.test_only+'clout3.npy',np.array(dcll_slices[2].clout))
-        np.save(args.test_only+'clout4.npy',np.array(dcll_slices[3].clout))
         np.save(args.test_only+'testlabels.npy', labels1h_tests[i])
         np.save(args.test_only+'testinputrate.npy', input_tests[i].reshape(n_iters_test,-1).mean(1).cpu().numpy())
         np.save(args.test_only+'testinput.npy', input_tests[i][:,0:10].cpu().numpy())

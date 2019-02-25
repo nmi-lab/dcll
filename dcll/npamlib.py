@@ -8,7 +8,7 @@
 #
 # Copyright : (c) UC Regents, Emre Neftci, Ryan Stokes
 # Licence : Apache License, Version 2.0
-#----------------------------------------------------------------------------- 
+#-----------------------------------------------------------------------------
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib,sys
@@ -43,7 +43,7 @@ def data_load_mnist(digits = None):
     Download and load MNIST hand-written digits
     Inputs:
     *digits*: list specifying which digits should be returned (default: return all digits 0-9)
-    Ouputs: 
+    Ouputs:
     *images* a 1000x784np.array storing 1000 28x28 pixel images of hand-written
     digits
     *labels* labels of the 1000 images
@@ -70,7 +70,7 @@ def data_load_mnist(digits = None):
     data = np.load(fname_data)
     labels = np.load(fname_targets)
     if digits is None:
-        return data, labels 
+        return data, labels
     else:
         idx = np.zeros_like(labels, dtype = 'bool')
         for d in digits:
@@ -146,22 +146,22 @@ def LIF(N=32, T=1000, alpha=.95, alphaS=0.975, theta=1, tarp=0, b=0.0, Win = Non
 
     #Main loop
     tV = np.random.rand(N)
-    for t in range(T): 
+    for t in range(T):
         tIsyn = Isyn.copy()
 
         id_non_refr = dtarp == 0
-        tV[~id_non_refr] = 0 
+        tV[~id_non_refr] = 0
         tV[id_non_refr] = alpha*tV[id_non_refr] + b[id_non_refr] + Isyn[id_non_refr]
 
-        tIsyn = alphaS*Isyn 
+        tIsyn = alphaS*Isyn
 
         if Win is not None and spikes_in is not None:
             tIsyn += np.dot(spikes_in[t], Win)
         id_spiked = tV>=theta
-        tV[id_spiked] = 0     
+        tV[id_spiked] = 0
         if np.any(id_spiked):
             dtarp[id_spiked] = tarp
-            spikes[t, id_spiked] = 1 
+            spikes[t, id_spiked] = 1
         dtarp[~id_non_refr] -= 1
 
         if W is not None:
@@ -172,7 +172,7 @@ def LIF(N=32, T=1000, alpha=.95, alphaS=0.975, theta=1, tarp=0, b=0.0, Win = Non
 
 
     return V, spikes
-    
+
 def FRN(N=32, b=0.0, Win = None, rates_in = None, activation_function = relu):
     '''
     Simulates a network of firing rate neurons.
@@ -201,20 +201,20 @@ def FRN(N=32, b=0.0, Win = None, rates_in = None, activation_function = relu):
 
     if Win is not None and rates_in is not None:
         tIsyn += np.dot(rates_in, Win)
-        
+
     tV = activation_function(b + tIsyn)
 
     return tV
-    
-def __spikes_to_evlist(spikes):
+
+def spikes_to_evlist(spikes):
     t = np.tile(np.arange(spikes.shape[0]), [spikes.shape[1],1])
-    n = np.tile(np.arange(spikes.shape[1]), [spikes.shape[0],1]).T  
+    n = np.tile(np.arange(spikes.shape[1]), [spikes.shape[0],1]).T
     return t[spikes.astype('bool').T], n[spikes.astype('bool').T]
-    
+
 def plot_spikes(spikes):
     '''
     This function plots spikes.
-    
+
     Inputs:
     *spikes*: an TxNnp.array of zeros and ones indicating spikes. This is the second
     output return by function LIF or generate_spike_trains
@@ -224,19 +224,19 @@ def plot_spikes(spikes):
 def plotLIF(V, spikes, Vplot = 'all', staggering= 1, ax1=None, ax2=None, **kwargs):
     '''
     This function plots the output of the function LIF.
-    
+
     Inputs:
     *V*: an TxNnp.array, where T are time steps and N are the number of neurons
     *spikes*: an TxNnp.array of zeros and ones indicating spikes. This is the second
     output return by function LIF
-    *Vplot*: A list indicating which neurons' membrane potentials should be 
+    *Vplot*: A list indicating which neurons' membrane potentials should be
     plotted. If scalar, the list range(Vplot) are plotted. Default: 'all'
     *staggering*: the amount by which each V trace should be shifted. None
-    
-    Outputs the figure returned by figure().    
+
+    Outputs the figure returned by figure().
     '''
     #Plot
-    t, n = __spikes_to_evlist(spikes)
+    t, n = spikes_to_evlist(spikes)
     #f = plt.figure()
     if V is not None and ax1 is None:
         ax1 = plt.subplot(211)
@@ -251,17 +251,17 @@ def plotLIF(V, spikes, Vplot = 'all', staggering= 1, ax1=None, ax2=None, **kwarg
         if Vplot == 'all':
             Vplot = range(V.shape[1])
         elif not hasattr(Vplot, '__iter__'):
-            Vplot = range(np.minimum(Vplot, V.shape[1]))    
-        
+            Vplot = range(np.minimum(Vplot, V.shape[1]))
+
         if ax2 is None:
             ax2 = plt.subplot(212)
-    
+
         if V.shape[1]>1:
             for i, idx in enumerate(Vplot):
                 ax2.plot(V[:,idx]+i*staggering,'-',  **kwargs)
         else:
             ax2.plot(V[:,0], '-', **kwargs)
-            
+
         if staggering!=0:
             plt.yticks([])
         plt.xlabel('t [au]')
@@ -274,27 +274,27 @@ def plotLIF(V, spikes, Vplot = 'all', staggering= 1, ax1=None, ax2=None, **kwarg
     plt.ion()
     plt.show()
     return ax1,ax2
-    
+
 def plotFRN(rates):
     '''
     This function plots the output of the function FRN.
-    
+
     Inputs:
     *rates*: an TxNnp.array indicating firing rates. This is the output
     returned by FRN
 
-    Outputs the figure returned by figure().    
+    Outputs the figure returned by figure().
     '''
     #Plot
-    
+
     f = plt.figure()
-    
+
     plt.imshow(rates.T, aspect='auto')
     plt.ylim([-1, rates.shape[1] + 1])
     plt.xlim([0, rates.shape[0]])
     plt.colorbar()
     return f
-    
+
 def plot_spike_count(spikes, average = False):
     rates = spikes.sum(axis=0)
     if average:
@@ -305,17 +305,17 @@ def plot_spike_count(spikes, average = False):
     plt.ylabel('Spike Count')
     plt.show()
     return f
-    
+
 def plotAF(inp, spikes):
     '''
     This function plots the activation function of the neurons in LIF.
-    
+
     Inputs:
     *inp*: an Nnp.array indicating the input rate of the neurons. This could be the
     parameter b of function LIF, or the rate of the spike trains in spikes_in
     *spikes*: an TxNnp.array of zeros and ones indicating spikes. This is the second
     output return by function LIF
-    Outputs the figure returned by figure().    
+    Outputs the figure returned by figure().
     '''
     fig = plt.figure()
     plt.plot(inp,spikes.mean(axis=0),'k.-', linewidth=3)
@@ -323,7 +323,7 @@ def plotAF(inp, spikes):
     plt.xlabel('Input')
     plt.tight_layout()
     return fig
-    
+
 def __inst_firing_rate(spikes, window = 100):
     inst_rates = np.empty_like(spikes)
     if not hasattr(window, '__iter__'):
@@ -331,19 +331,19 @@ def __inst_firing_rate(spikes, window = 100):
     for i in range(spikes.shape[1]):
         inst_rates[:,i] = np.convolve(window, spikes[:,i], mode='same')
     return inst_rates
-    
-def __gen_ST(N, T, rate, mode = 'regular'):    
+
+def __gen_ST(N, T, rate, mode = 'regular'):
     if mode == 'regular':
         spikes = np.zeros([T, N])
         spikes[::(1000//rate)] = 1
         return spikes
     elif mode == 'poisson':
-        spikes = np.ones([T, N])        
+        spikes = np.ones([T, N])
         spikes[np.random.binomial(1,float(1000. - rate)/1000, size=(T,N)).astype('bool')] = 0
         return spikes
     else:
         raise Exception('mode must be regular or Poisson')
-        
+
 def spiketrains(N, T, rates, mode = 'poisson'):
     if not hasattr(rates, '__iter__'):
         return __gen_ST(N, T, rates, mode)
@@ -354,17 +354,17 @@ def spiketrains(N, T, rates, mode = 'poisson'):
         if int(rates[i])>0:
             spikes[:,i] = __gen_ST(1, T, int(rates[i]), mode = mode).flatten()
     return spikes
-        
-    
+
+
 def __stim_rotate(image, angle=45):
     from scipy import ndimage
     return ndimage.rotate(image, angle, reshape=False)
-    
+
 def stim_vertical_bar(npixels=28, width=4):
     image = np.zeros([npixels, npixels])
     image[:,(npixels/2-width/2):(npixels/2+width/2)]=1
     return image
-    
+
 def stim_orientations(image, orientations = 9, flattened = True):
     if not hasattr(orientations, '__iter__'):
         orientations = np.linspace(0, 360, orientations)
@@ -481,8 +481,8 @@ def __tile_raster_images(X, img_shape, tile_shape, tile_spacing=(0, 0),
                         tile_col * (W + Ws): tile_col * (W + Ws) + W
                         ] = this_img * c
         return out_array
-        
-        
+
+
 def __scale_to_unit_interval(ndar, eps=1e-8):
     """ Scales all values in the ndarray ndar to be between 0 and 1 """
     ndar = ndar.copy()
@@ -495,7 +495,7 @@ def stim_show(images):
     '''
     Plots every image in images (using imshow)
     '''
-    til = __tile_raster_images(images, 
+    til = __tile_raster_images(images,
                     np.array([images.shape[1]**.5, images.shape[1]**.5], 'int'),
                     np.array([images.shape[0]**.5, images.shape[0]**.5], 'int'),
                     tile_spacing = (5,5))
@@ -505,8 +505,8 @@ def stim_show(images):
     plt.xticks([]), plt.yticks([])
     plt.show()
     return f
-    
-    
+
+
 def ann_createDataSet(N):
     '''
     Random linearly separated data (2 dimensions)
@@ -525,9 +525,9 @@ def ann_createDataSet(N):
         s = int(np.sign(V[1:].T.dot(x)+V[0]))
         X.append(x)
         S.append(s)
-    return np.array(X), np.array(S)  
-        
-        
+    return np.array(X), np.array(S)
+
+
 def ann_plotSet(X, S, vec = None, f = None):
     '''
     Plot 2D data
@@ -551,7 +551,7 @@ def ann_plotSet(X, S, vec = None, f = None):
         aa, bb = -vec[1]/vec[2], -vec[0]/vec[2]
         plt.plot(l, aa*l+bb, 'g-', lw=2)
 
- 
+
 def ann_classification_error(X, S, vec, pts=None):
     '''
     Compute error defined as fraction of misclassified points
@@ -570,8 +570,8 @@ def ann_classification_error(X, S, vec, pts=None):
             n_mispts += 1
     error = n_mispts / float(M)
     return error
- 
- 
+
+
 def ann_choose_miscl_point(X, S, vec):
     '''
     Choose a random point among the misclassified
@@ -585,8 +585,8 @@ def ann_choose_miscl_point(X, S, vec):
         if int(np.sign(vec[1:].T.dot(x)+vec[0])) != s:
             mispts.append((x, s))
     return mispts[np.random.randint(0,len(mispts))]
- 
- 
+
+
 def ann_demo_pla_2D(N):
     '''
     Demonstration of the Perceptron Learning Algorithm, step by step
@@ -620,7 +620,7 @@ def ann_demo_pla_2D(N):
         plt.draw()
         if ann_classification_error(X, S, w) == 0:
             break
-              
+
 def ann_train_perceptron(data, labels, n, eta, w = None):
     '''
     Train a perceptron on arbitrary data
@@ -639,12 +639,12 @@ def ann_train_perceptron(data, labels, n, eta, w = None):
     if w is None:
         w = np.random.rand(1+len(data[0]))
     errors = []
-    
+
     training_data = list(zip(data,labels))
 
     for i in range(n):
         ii = np.random.choice(len(training_data))
-        x, expected = data[ii], labels[ii] 
+        x, expected = data[ii], labels[ii]
         result = np.dot(w[1:], x) + w[0]
         error = expected - threshold(result)
         errors.append(error)
@@ -654,7 +654,7 @@ def ann_train_perceptron(data, labels, n, eta, w = None):
     print('Percent correct:')
     res = np.sum(labels == ann_perceptron(data, w)).astype('float')/len(data)
     print(res)
-    
+
 
     return w, res
 
@@ -675,7 +675,7 @@ def ann_train_mlp(data, labels, n, eta, w = None, size = None):
         was [2, 3, 1] then it would be a three-layer network, with the
         first layer containing 2 neurons, the second layer 3 neurons,
         and the third layer 1 neuron. Note that the size of the first layer
-        must correspond to the number of features in the data sample and 
+        must correspond to the number of features in the data sample and
         the size of the last layer must correspond to the number of different
         labels.
 
@@ -706,7 +706,7 @@ def ann_train_mlp(data, labels, n, eta, w = None, size = None):
     return [mlp.biases, mlp.weights], float(mlp.evaluate(training_data))/len(training_data)
 
 ##
-# The following code has been modified 
+# The following code has been modified
 # from http://neuralnetworksanddeeplearning.com/chap1.html
 class MLPNetwork(object):
     def __init__(self, sizes, weights = None, biases = None):
@@ -827,7 +827,7 @@ class MLPNetwork(object):
         """Return the vector of partial derivatives \partial C_x /
         \partial a for the output activations."""
         return (output_activations-y)
-        
+
 
 
 letters_dict = {'a':np.array([ 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, -1, -1, -1,
