@@ -242,6 +242,7 @@ if __name__ == "__main__":
             net.dcll_slices[1].optimizer.param_groups[-1]['lr']/=2
             net.dcll_slices[2].optimizer.param_groups[-1]['lr']/=2
             net.dcll_slices[2].optimizer2.param_groups[-1]['lr']/=2
+            ref_net.optim.param_groups[-1]['lr']/=2
             print("Adjusting learning rates")
 
         try:
