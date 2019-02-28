@@ -55,3 +55,7 @@ layer = Conv2dDCLLlayer(...)
 ```
 
 Have a look in [samples/pytorch_conv3L_mnist.py](samples/pytorch_conv3L_mnist.py) for example usage.
+
+## Tutorials
+
+The notebooks under tutorials are standalone, step-by-step instructions for setting up spiking neural networks in PyTorch and setting up DCLL. See for example [tutorials/dcll_tutorial1.ipynb](tutorials/dcll_tutorial1.ipynb).
