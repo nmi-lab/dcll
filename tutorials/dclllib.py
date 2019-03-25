@@ -97,8 +97,6 @@ def plotLIF(U, S, Vplot = 'all', staggering= 1, ax1=None, ax2=None, **kwargs):
 
 import numpy as np
 
-from dcll.npamlib import spiketrains
-
 input_shape = [28,28,1]
 
 
