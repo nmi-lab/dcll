@@ -51,10 +51,7 @@ class LIFLayer(nn.Module):
         self.out_channels = layer.out_features
         self.alpha = alpha
         self.beta = beta
-        self.state = self.NeuronState(P=torch.zeros(self.in_channels).type(dtype),
-                                      Q=torch.zeros(self.in_channels).type(dtype),
-                                      R=torch.zeros(self.out_channels).type(dtype),
-                                      S=torch.zeros(self.out_channels).type(dtype))
+        self.state = None
         self.layer.weight.data.uniform_(-.3, .3)
         self.layer.bias.data.uniform_(-.01, .01)        
         
@@ -63,10 +60,7 @@ class LIFLayer(nn.Module):
         Handle the transfer of the neuron state to cuda
         '''
         self = super().cuda(device)
-        self.state = self.NeuronState(P=self.state.P.cuda(device),
-                                      Q=self.state.Q.cuda(device),
-                                      R=self.state.R.cuda(device),
-                                      S=self.state.S.cuda(device))
+        self.state = None
         self.layer = self.layer.cuda()
         return self 
     
@@ -75,14 +69,21 @@ class LIFLayer(nn.Module):
         Handle the transfer of the neuron state to cpu
         '''
         self = super().cpu(device)
-        self.state = self.NeuronState(P=self.state.P.cpu(device),
-                                      Q=self.state.Q.cpu(device),
-                                      R=self.state.R.cpu(device),
-                                      S=self.state.S.cpu(device))
+        self.state = None
         self.layer = self.layer.cpu()
         return self 
+
+    def init_state(self, Sin_t):
+        device = self.layer.weight.device
+        self.state = self.NeuronState(P=torch.zeros(self.in_channels).type(dtype).to(device),
+                         Q=torch.zeros(self.in_channels).type(dtype).to(device),
+                         R=torch.zeros(self.out_channels).type(dtype).to(device),
+                         S=torch.zeros(self.out_channels).type(dtype).to(device))
     
     def forward(self, Sin_t):
+        if self.state is None:
+            self.init_state(Sin_t)
+            
         state = self.state
         P = self.alpha*state.P + state.Q
         R = self.alpha*state.R - state.S
@@ -129,8 +130,7 @@ class DCLL(nn.Module):
     def forward(self, input):
         s1, u1 = self.layer1(input)
         s1dp = s1[-1] #self.drop_out(s1[-1])
-        r1 = self.le_layer1(smooth_step(u1))
-        
+        r1 = self.le_layer1(smooth_step(u1))        
         s2, u2 = self.layer2(s1dp) 
         s2dp = s2[-1] #self.drop_out(s2[-1])
         r2 = self.le_layer2(smooth_step(u2)) 
@@ -143,6 +143,13 @@ class DCLL(nn.Module):
     
     def get_trainable_parameters(self):
         return chain(*[l.parameters() for l in self.layers])
+
+    def init(self, input):
+        '''
+        Necessary for initializing the RNN with the correct batch_size
+        '''
+        for i in range(len(self)):
+            self.forward(input)
     
     
 
