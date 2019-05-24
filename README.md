@@ -45,8 +45,8 @@ Check out the jupyter notebooks for the [DvsGesture dataset](notebooks/plot_dvs_
 
 ## Usage
 
-The core of the DCLL framework are implemented as torch Modules in `dcll/pytorch_libdcll.py`.
-Since we provide this code as a library, you can reuse the DCLL layers in your own [PyTorch](https://pytorch.org/) code:
+The core of the DECOLLE framework are implemented as torch Modules in `dcll/pytorch_libdcll.py`.
+Since we provide this code as a library, you can reuse the DECOLLE layers in your own [PyTorch](https://pytorch.org/) code:
 
 ```
 import torch
@@ -58,4 +58,4 @@ Have a look in [samples/pytorch_conv3L_mnist.py](samples/pytorch_conv3L_mnist.py
 
 ## Tutorials
 
-The notebooks under tutorials are standalone, step-by-step instructions for setting up spiking neural networks in PyTorch and setting up DCLL. See for example [tutorials/dcll_tutorial1.ipynb](tutorials/dcll_tutorial1.ipynb).
+The notebooks under tutorials are standalone, step-by-step instructions for setting up spiking neural networks in PyTorch and setting up DECOLLE. See for example [tutorials/dcll_tutorial1.ipynb](tutorials/dcll_tutorial1.ipynb).
