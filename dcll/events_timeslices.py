@@ -1,10 +1,17 @@
-"""DAVIS346 test example.
+#!/bin/python
+#-----------------------------------------------------------------------------
+# File Name : event_timeslices.py
+# Author: Emre Neftci
+#
+# Creation Date : 
+# Last Modified : Thu 16 May 2019 02:13:09 PM PDT
+#
+# Copyright : (c) UC Regents, Emre Neftci
+# Licence : GPLv2
+#----------------------------------------------------------------------------- 
 
-Author: Yuhuang Hu
-Email : duguyue100@gmail.com
-"""
 from __future__ import print_function
-
+import bisect
 import numpy as np
 from scipy.sparse import coo_matrix as sparse_matrix
 
@@ -18,18 +25,8 @@ def one_hot(mbt, num_classes):
     out[np.arange(mbt.shape[0], dtype='int'),mbt.astype('int')] = 1
     return out
 
-#def find_first(a, tgt):
-#    previ = 0
-#    for i,aa in enumerate(a):
-#        if aa>tgt:
-#            return previ
-#        else:
-#            previ = i
-#    return len(a)
-import bisect
 def find_first(a, tgt):
     return bisect.bisect_left(a, tgt)
-
 
 def cast_evs(evs):
     ts = (evs[:,0]*1e6).astype('uint64')
@@ -43,13 +40,31 @@ def get_binary_frame(evs, size = (346,260), ds=1):
     tr = sparse_matrix((2*evs[:,3]-1,(evs[:,1]//ds,evs[:,2]//ds)), dtype=np.int8, shape=size)
     return tr.toarray()
 
-#def get_binary_frame_np(evs, size = (346,260), ds=1):
-#    tr = np.zeros(size, 'int8')
-#    tr.put((evs[:,1]//ds)*size[1]+ (evs[:,2]//ds), 2*evs[:,3]-1)
-#    return tr
-
 def get_binary_frame_np(arr, evs, size = (346,260), ds=1):
     arr[evs[:,1]//ds,evs[:,2]//ds] = 2*evs[:,3]-1
+
+def get_event_timeslice(device, Deltat = 1000*50):
+    #flush
+    device.get_event()
+    t = -1
+    evs = []
+    while t<Deltat:
+        evs_frame_tmp = device.get_event()[0]
+        evs.append(evs_frame_tmp)
+        if t == -1:
+            t0 = evs_frame_tmp[0,0]
+        try:
+            t = (evs_frame_tmp[-1,0] - t0)
+        except TypeError:
+            continue
+
+
+    evs = np.row_stack(evs)
+    idx_end = np.searchsorted(evs[:,0], t0+Deltat)
+    evs_frame = evs[:idx_end]
+    evs_frame[:,0]= -evs_frame[-1,0] + evs_frame[:,0]
+    print(evs_frame[0,0],evs_frame[-1,0])
+    return evs_frame
 
 def get_time_surface(device, invtau = 1e-6, size= (346,260,2)):
     evs = get_event_timeslice(device)
@@ -60,9 +75,6 @@ def get_time_surface(device, invtau = 1e-6, size= (346,260,2)):
         tr[ev[1],ev[2],ev[3]]=ev[0]
 
     a = np.exp(tr[:,:,0]*1e-6)-np.exp(tr[:,:,1]*1e-6)
-
-    #im = Image.fromarray(np.uint8(pylab.cm.jet((a.T+1)/2)*255))
-    #return im
     return a
 
 def chunk_evs(evs, deltat=1000, chunk_size=500, size = [304,240], ds = 1):
@@ -88,7 +100,8 @@ def chunk_evs_pol(times, addrs, deltat=1000, chunk_size=500, size = [2,304,240],
         idx_end += find_first(times[idx_end:], t)
         if idx_end>idx_start:
             ee = addrs[idx_start:idx_end]
-            chunks[i,ee[:,2],ee[:,0]//ds,ee[:,1]//ds] += 1
+            pol,x,y = ee[:,2],ee[:,0]//ds,ee[:,1]//ds
+            np.add.at(chunks,(i,pol,x,y),1) 
         idx_start = idx_end
     return chunks
 

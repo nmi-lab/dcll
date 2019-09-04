@@ -76,15 +76,6 @@ class SequenceGenerator(object):
 
         return dat, lab
 
-#def find_first(a, i):
-#    return np.searchsorted(a,i)
-
-#def find_first(a, tgt):
-#    for i,aa in enumerate(a):
-#        if aa>tgt:
-#            return i
-#    return len(a)
-
 def gather_gestures_stats(hdf5_grp):
     from collections import Counter
     labels = []
@@ -235,6 +226,7 @@ def get_event_slice(times, addrs, start_time, T, size = [128,128], ds = 1, dt = 
         return chunk_evs_pol(times[idx_beg:idx_end], addrs[idx_beg:idx_end], deltat=dt, chunk_size=T, size = size, ds = ds)
     except IndexError:
         print("Empty batch found, returning -1")
+        raise
         return -1
 
 def create_events_hdf5(hdf5_filename):
