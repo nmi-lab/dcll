@@ -1,11 +1,12 @@
-﻿# Synaptic Plasticity Dynamics for Deep Continuous Local Learning (DECOLLE)
+# Synaptic Plasticity Dynamics for Deep Continuous Local Learning (DECOLLE)
 
-This repo contains the [PyTorch](https://pytorch.org/) implementation of the DECOLLE
+This repo contains the [PyTorch](https://pytorch.org/) implementation of the DECOLLE learning rule presented in [this paper](https://arxiv.org/abs/1811.10766).
+
 If you use this code in a scientific publication, please include the following reference in your bibliography:
 
 ```
 @article{kaiser2018synaptic,
-  title={Synaptic Plasticity Dynamics for Deep Continuous Local Learning},
+  title={Synaptic Plasticity Dynamics for Deep Continuous Local Learning (DECOLLE)},
   author={Kaiser, Jacques and Mostafa, Hesham and Neftci, Emre},
   journal={arXiv preprint arXiv:1811.10766},
   year={2018}
